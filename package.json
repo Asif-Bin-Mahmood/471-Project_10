@@ -1,0 +1,21 @@
+{
+  "name": "officekhoj-bd-fullstack",
+  "version": "1.0.0",
+  "description": "Full-stack OfficeKhoj BD prototype for CSE471 Group 10.",
+  "main": "backend/src/server.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:memory": "node backend/scripts/devMemory.mjs",
+    "start": "npm --prefix backend start",
+    "build": "npm --prefix frontend run build",
+    "seed": "npm --prefix backend run seed",
+    "install:all": "npm install --prefix backend && npm install --prefix frontend"
+  },
+  "keywords": [
+    "officekhoj",
+    "cse471",
+    "group10"
+  ],
+  "author": "M A OBAEED - 21201382",
+  "license": "MIT"
+}

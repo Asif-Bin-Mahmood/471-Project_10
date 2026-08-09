@@ -1,0 +1,19 @@
+{
+  "name": "officekhoj-bd-frontend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^6.0.5",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.30.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "socket.io-client": "^4.8.3",
+    "vite": "^8.2.1"
+  }
+}

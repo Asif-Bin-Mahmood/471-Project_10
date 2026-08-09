@@ -1,0 +1,62 @@
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+.vite/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Temporary/runtime data
+.runtime/
+.docx_work/
+tmp/
+temp/
+*.tmp
+*.temp
+*.cache
+
+# Generated exports and duplicate project snapshots
+exports/
+
+# Project documentation and generated reports
+*.md
+*.docx
+*.doc
+*.pdf
+modules/
+
+# Screenshots and captured UI media (application assets under frontend/public remain included)
+screenshots/
+**/screenshots/
+/Screenshot*
+/screenshot*
+/codex-clipboard-*
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+
+# IDE, OS, and personal files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+~$*
