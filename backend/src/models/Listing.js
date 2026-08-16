@@ -27,5 +27,7 @@ const listingSchema = new mongoose.Schema(
 );
 
 listingSchema.index({ area: 1, listingType: 1, category: 1, price: 1, status: 1 });
+listingSchema.index({ verificationStatus: 1, status: 1, listingType: 1, category: 1, price: 1 });
+listingSchema.index({ verificationStatus: 1, status: 1, rating: -1 });
 
 export default mongoose.model("Listing", listingSchema);

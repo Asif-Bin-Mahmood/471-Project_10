@@ -116,7 +116,7 @@ export async function searchMapboxAddresses(query) {
     country: "bd",
     proximity: DHAKA_PROXIMITY,
     types: "address,street,neighborhood,locality,place",
-    limit: 6
+    limit: 8
   });
 }
 

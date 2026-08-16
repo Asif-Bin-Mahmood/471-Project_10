@@ -6,10 +6,41 @@ import { addressSuggestions } from "../seed/seedSource.js";
 import { resolveMapboxAddress, searchMapboxAddresses } from "../services/mapboxGeocoding.service.js";
 import { canManageDocument } from "../utils/auth.js";
 import { locationMetric, nearbyPlaces, serializeListing } from "../utils/geo.js";
+import { attachProviderRating } from "../utils/providerRating.js";
 
 function parseNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function parseOptionalNumber(value, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  return parseNumber(value, fallback);
+}
+
+function parsePositiveInteger(value, fallback, max) {
+  const number = Math.trunc(Number(value));
+  if (!Number.isFinite(number) || number < 1) return fallback;
+  return Math.min(number, max);
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeSort(value) {
+  const sort = String(value || "distance").toLowerCase();
+  if (["price", "price-asc"].includes(sort)) return "price-asc";
+  if (["price-desc", "price_high", "price-high"].includes(sort)) return "price-desc";
+  if (["rating", "rating-desc"].includes(sort)) return "rating";
+  if (sort === "newest") return "newest";
+  return "distance";
+}
+
+function compareDistance(a, b) {
+  const aDistance = Number.isFinite(a.distanceKm) ? a.distanceKm : Number.POSITIVE_INFINITY;
+  const bDistance = Number.isFinite(b.distanceKm) ? b.distanceKm : Number.POSITIVE_INFINITY;
+  return aDistance - bDistance;
 }
 
 function hasText(value, min = 1) {
@@ -55,12 +86,13 @@ export async function searchListings(req, res, next) {
       ownerId,
       includeUnavailable = "false"
     } = req.query;
-    const maxPrice = parseNumber(req.query.maxPrice, Number.MAX_SAFE_INTEGER);
-    const minPrice = parseNumber(req.query.minPrice, 0);
-    const minSize = parseNumber(req.query.minSize, 0);
-    const page = Math.max(1, parseNumber(req.query.page, 1));
-    const pageSize = Math.max(2, Math.min(12, parseNumber(req.query.pageSize, 6)));
+    const maxPrice = Math.max(0, parseOptionalNumber(req.query.maxPrice, Number.MAX_SAFE_INTEGER));
+    const minPrice = Math.max(0, parseOptionalNumber(req.query.minPrice, 0));
+    const minSize = Math.max(0, parseOptionalNumber(req.query.minSize, 0));
+    const page = parsePositiveInteger(req.query.page, 1, Number.MAX_SAFE_INTEGER);
+    const pageSize = parsePositiveInteger(req.query.pageSize, 6, 50);
     const selectedType = listingType || type;
+    const selectedSort = normalizeSort(sort);
 
     const filter = {
       verificationStatus: "verified",
@@ -71,10 +103,11 @@ export async function searchListings(req, res, next) {
     if (selectedType !== "all") filter.listingType = selectedType;
     if (category !== "all") filter.category = category;
     if (area) {
+      const areaPattern = new RegExp(escapeRegex(area), "i");
       filter.$or = [
-        { area: new RegExp(area, "i") },
-        { address: new RegExp(area, "i") },
-        { coverageAreas: new RegExp(area, "i") }
+        { area: areaPattern },
+        { address: areaPattern },
+        { coverageAreas: areaPattern }
       ];
     }
     if (minSize > 0) {
@@ -88,10 +121,11 @@ export async function searchListings(req, res, next) {
     const docs = await Listing.find(filter).populate("owner").lean();
     const enriched = docs.map(serializeListing);
     enriched.sort((a, b) => {
-      if (sort === "price") return a.price - b.price;
-      if (sort === "rating") return b.rating - a.rating;
-      if (sort === "newest") return new Date(b.createdAt) - new Date(a.createdAt);
-      return a.distanceKm - b.distanceKm;
+      if (selectedSort === "price-asc") return Number(a.price || 0) - Number(b.price || 0);
+      if (selectedSort === "price-desc") return Number(b.price || 0) - Number(a.price || 0);
+      if (selectedSort === "rating") return Number(b.rating || 0) - Number(a.rating || 0);
+      if (selectedSort === "newest") return new Date(b.createdAt) - new Date(a.createdAt);
+      return compareDistance(a, b);
     });
 
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -105,7 +139,7 @@ export async function searchListings(req, res, next) {
       pageSize,
       total,
       totalPages,
-      filters: { area, type: selectedType, category, sort, minPrice, maxPrice, minSize },
+      filters: { area, type: selectedType, category, sort: selectedSort, minPrice, maxPrice, minSize },
       summary: {
         avgPrice,
         propertyCount: enriched.filter((listing) => listing.listingType === "property").length,
@@ -289,8 +323,9 @@ export async function getListingDetail(req, res, next) {
   try {
     const listing = await Listing.findById(req.params.id).populate("owner").lean();
     if (!listing) return res.status(404).json({ error: "Listing not found." });
-    const reviews = await Review.find({ listing: req.params.id }).populate("reviewer").sort({ createdAt: -1 }).lean();
+    const reviews = await Review.find({ listing: req.params.id }).populate("reviewer", "name role").sort({ createdAt: -1 }).lean();
     const serialized = serializeListing(listing);
+    serialized.owner = await attachProviderRating(serialized.owner);
     serialized.reviews = reviews.slice(0, 3);
     const suggestions = await Listing.find({
       listingType: "service",

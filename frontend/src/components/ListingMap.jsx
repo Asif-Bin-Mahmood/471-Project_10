@@ -21,13 +21,21 @@ function popupContent(listing) {
   const title = document.createElement("strong");
   title.textContent = listing.title || "OfficeKhoj listing";
 
+  const type = document.createElement("span");
+  type.textContent = listing.listingType === "service" ? "Service" : "Property";
+
   const area = document.createElement("span");
-  area.textContent = listing.area || "Dhaka";
+  area.textContent = listing.area || "Bangladesh";
 
   const address = document.createElement("p");
   address.textContent = listing.address || "Address not available";
 
-  content.append(title, area, address);
+  const meta = document.createElement("small");
+  const price = Number(listing.price || 0).toLocaleString("en-BD");
+  const rating = Number(listing.rating || 0).toFixed(1);
+  meta.textContent = `BDT ${price} - ${rating}/5`;
+
+  content.append(title, type, area, address, meta);
   return content;
 }
 

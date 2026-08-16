@@ -1,10 +1,49 @@
 import User from "../models/User.js";
+import { attachProviderRating } from "../utils/providerRating.js";
+
+const profileStringFields = {
+  businessType: 80,
+  preferredArea: 80,
+  serviceNeed: 140
+};
+const profileNumberFields = ["budgetMin", "budgetMax", "minSize"];
+
+function sanitizeProfileUpdate(body, currentProfile) {
+  const update = {};
+  const errors = [];
+
+  for (const [field, maxLength] of Object.entries(profileStringFields)) {
+    if (body[field] === undefined) continue;
+    const value = String(body[field] ?? "").trim();
+    if (value.length > maxLength) errors.push(`${field} must be ${maxLength} characters or less.`);
+    update[field] = value;
+  }
+
+  for (const field of profileNumberFields) {
+    if (body[field] === undefined) continue;
+    const number = body[field] === "" || body[field] === null ? 0 : Number(body[field]);
+    if (!Number.isFinite(number) || number < 0) {
+      errors.push(`${field} must be a finite number greater than or equal to 0.`);
+      continue;
+    }
+    update[field] = number;
+  }
+
+  const nextBudgetMin = update.budgetMin ?? currentProfile.budgetMin ?? 0;
+  const nextBudgetMax = update.budgetMax ?? currentProfile.budgetMax ?? 0;
+  if (nextBudgetMin > nextBudgetMax) {
+    errors.push("budgetMin must be less than or equal to budgetMax.");
+  }
+
+  return { update, errors };
+}
 
 export async function getProfile(req, res, next) {
   try {
-    const profile = await User.findById(req.params.id).populate("savedListings");
+    const profileId = req.user.role === "admin" ? req.params.id : req.user._id;
+    const profile = await User.findById(profileId).populate("savedListings");
     if (!profile) return res.status(404).json({ error: "Profile not found." });
-    res.json({ profile });
+    res.json({ profile: await attachProviderRating(profile) });
   } catch (error) {
     next(error);
   }
@@ -12,11 +51,17 @@ export async function getProfile(req, res, next) {
 
 export async function updateProfile(req, res, next) {
   try {
-    const fields = ["businessType", "preferredArea", "budgetMin", "budgetMax", "minSize", "serviceNeed"];
-    const update = Object.fromEntries(fields.filter((field) => req.body[field] !== undefined).map((field) => [field, req.body[field]]));
-    const profile = await User.findByIdAndUpdate(req.params.id, update, { new: true }).populate("savedListings");
+    const profileId = req.user.role === "admin" ? req.params.id : req.user._id;
+    const profile = await User.findById(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found." });
-    res.json({ profile });
+
+    const { update, errors } = sanitizeProfileUpdate(req.body, profile);
+    if (errors.length) return res.status(422).json({ error: "Profile validation failed.", details: errors });
+
+    Object.assign(profile, update);
+    await profile.save();
+    await profile.populate("savedListings");
+    res.json({ profile: await attachProviderRating(profile) });
   } catch (error) {
     next(error);
   }

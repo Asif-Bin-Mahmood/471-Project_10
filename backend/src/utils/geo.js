@@ -13,8 +13,22 @@ function haversineKm(aLat, aLng, bLat, bLng) {
   return 2 * radiusKm * Math.asin(Math.sqrt(h));
 }
 
+function hasValidCoordinates(lat, lng) {
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+}
+
 export function locationMetric(listing) {
-  const { lat, lng } = listing.location || listing;
+  const rawLocation = listing.location || listing;
+  const lat = Number(rawLocation.lat);
+  const lng = Number(rawLocation.lng);
+
+  if (!hasValidCoordinates(lat, lng)) {
+    return {
+      distanceKm: null,
+      metricLabel: "Coordinates unavailable"
+    };
+  }
+
   const nearest = landmarkData
     .map((landmark) => ({
       ...landmark,
@@ -40,13 +54,14 @@ export function serializeListing(listing) {
 
 export function nearbyPlaces(listing) {
   const metric = locationMetric(listing);
+  const baseDistance = Number(metric.distanceKm || 0);
   return Object.entries(nearbySeed).flatMap(([category, names], categoryIndex) =>
     names.map((name, index) => ({
       id: `${listing._id}-${category}-${index}`,
       category,
       name,
-      distanceKm: Number((0.18 + categoryIndex * 0.11 + index * 0.08 + metric.distanceKm / 20).toFixed(2)),
-      walkingMinutes: Math.round((0.18 + categoryIndex * 0.11 + index * 0.08 + metric.distanceKm / 20) * 12)
+      distanceKm: Number((0.18 + categoryIndex * 0.11 + index * 0.08 + baseDistance / 20).toFixed(2)),
+      walkingMinutes: Math.round((0.18 + categoryIndex * 0.11 + index * 0.08 + baseDistance / 20) * 12)
     }))
   );
 }

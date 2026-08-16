@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarCheck,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   ClipboardCheck,
@@ -34,6 +35,7 @@ import {
   XCircle
 } from "lucide-react";
 import { api, setAuthToken } from "./api/client.js";
+import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 import { MessagesPage, NotificationsPage } from "./components/Communications.jsx";
 import ListingMap from "./components/ListingMap.jsx";
 import { connectSocket, disconnectSocket, getSocket } from "./realtime/socket.js";
@@ -77,6 +79,7 @@ const initialSearchQuery = {
   type: "all",
   category: "all",
   sort: "distance",
+  minPrice: 0,
   maxPrice: 150000,
   minSize: 0,
   page: 1,
@@ -84,6 +87,41 @@ const initialSearchQuery = {
 };
 
 const CUSTOMER_SERVICE_PHONE = "+8801636317693";
+const categoryValues = ["Office", "Shop", "Interior", "ISP", "Electrician"];
+
+function normalizePreferenceNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+function hasSavedSearchPreferences(profile) {
+  if (!profile) return false;
+  return Boolean(
+    String(profile.preferredArea || "").trim() ||
+    normalizePreferenceNumber(profile.budgetMin) > 0 ||
+    normalizePreferenceNumber(profile.budgetMax) > 0 ||
+    normalizePreferenceNumber(profile.minSize) > 0
+  );
+}
+
+function queryFromSavedPreferences(profile, baseQuery = initialSearchQuery) {
+  const nextQuery = { ...baseQuery, page: 1 };
+  const preferredArea = String(profile?.preferredArea || "").trim();
+  if (preferredArea) nextQuery.area = preferredArea;
+  nextQuery.minPrice = normalizePreferenceNumber(profile?.budgetMin);
+  const maxBudget = normalizePreferenceNumber(profile?.budgetMax, initialSearchQuery.maxPrice);
+  nextQuery.maxPrice = maxBudget > 0 ? maxBudget : initialSearchQuery.maxPrice;
+  nextQuery.minSize = normalizePreferenceNumber(profile?.minSize);
+  return nextQuery;
+}
+
+function visiblePages(currentPage, totalPages) {
+  const current = Number(currentPage || 1);
+  const total = Number(totalPages || 1);
+  const start = Math.max(1, current - 2);
+  const end = Math.min(total, start + 4);
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+}
 
 function viewFromPathname(pathname) {
   if (pathname === "/messages") return "messages";
@@ -209,6 +247,23 @@ function asList(value) {
   return value || "Not added";
 }
 
+function isProviderProfile(profile) {
+  return ["property-owner", "service-provider"].includes(profile?.role);
+}
+
+function ProviderRatingLine({ profile }) {
+  if (!isProviderProfile(profile)) return null;
+  const reviewCount = Number(profile.reviewCount || profile.ratingSummary?.reviewCount || 0);
+  const averageRating = Number(profile.averageRating ?? profile.ratingSummary?.averageRating ?? 0);
+
+  return (
+    <p className="provider-rating-line">
+      <Star size={13} fill={reviewCount ? "currentColor" : "none"} />
+      {reviewCount ? `${averageRating.toFixed(1)} (${reviewCount} review${reviewCount === 1 ? "" : "s"})` : "No reviews yet"}
+    </p>
+  );
+}
+
 function humanizePhotoName(value) {
   return String(value || "photo")
     .split("/")
@@ -292,6 +347,70 @@ function MetricCard({ icon, label, value, note, tone }) {
   );
 }
 
+function StarMeter({ rating = 0, size = 15 }) {
+  const numeric = Number(rating || 0);
+  const rounded = Math.round(numeric);
+  return (
+    <span className="star-meter" aria-label={`${numeric.toFixed(1)} out of 5`}>
+      {[1, 2, 3, 4, 5].map((value) => (
+        <Star
+          key={value}
+          size={size}
+          className={value <= rounded ? "filled" : ""}
+          fill={value <= rounded ? "currentColor" : "none"}
+        />
+      ))}
+    </span>
+  );
+}
+
+function StarRatingInput({ value, onChange }) {
+  const [hoverValue, setHoverValue] = useState(0);
+  const previewValue = hoverValue || value;
+
+  function moveRating(event, nextValue) {
+    event.preventDefault();
+    onChange(Math.max(1, Math.min(5, nextValue)));
+  }
+
+  return (
+    <div className="star-input" role="radiogroup" aria-label="Rating">
+      {[1, 2, 3, 4, 5].map((starValue) => (
+        <button
+          key={starValue}
+          type="button"
+          role="radio"
+          aria-checked={value === starValue}
+          aria-label={`${starValue} out of 5`}
+          className={starValue <= previewValue ? "selected" : ""}
+          onClick={() => onChange(starValue)}
+          onFocus={() => setHoverValue(starValue)}
+          onBlur={() => setHoverValue(0)}
+          onMouseEnter={() => setHoverValue(starValue)}
+          onMouseLeave={() => setHoverValue(0)}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowRight" || event.key === "ArrowUp") moveRating(event, (value || 0) + 1);
+            if (event.key === "ArrowLeft" || event.key === "ArrowDown") moveRating(event, (value || 1) - 1);
+          }}
+        >
+          <Star size={24} fill={starValue <= previewValue ? "currentColor" : "none"} />
+        </button>
+      ))}
+      <button
+        className="icon-button clear-rating"
+        type="button"
+        title="Clear rating"
+        aria-label="Clear rating"
+        onClick={() => onChange(0)}
+        disabled={!value}
+      >
+        <XCircle size={16} />
+      </button>
+      <strong>{value ? `${value} / 5` : "No rating"}</strong>
+    </div>
+  );
+}
+
 function DataBar({ label, value, max = 1, note }) {
   const width = Math.max(7, Math.min(100, (Number(value || 0) / Math.max(1, max)) * 100));
   return (
@@ -350,8 +469,22 @@ function ListingRow({ listing, onOpen, onSave, onBook, onMessage }) {
   );
 }
 
-function ManagementListingRow({ listing, profile, onOpen, onStatus, onPrice, onDelete }) {
+function ManagementListingRow({
+  listing,
+  profile,
+  addressEditor,
+  busy,
+  onOpen,
+  onStatus,
+  onPrice,
+  onDelete,
+  onEditAddress,
+  onCancelAddress,
+  onAddressSelect,
+  onAddressSubmit
+}) {
   const alternateStatus = listing.listingType === "service" ? "Busy" : "Leased";
+  const isEditingAddress = addressEditor?.listingId === listing._id;
   return (
     <article className="management-row">
       <button className="listing-thumb" type="button" onClick={() => onOpen(listing._id)} title="Open detail">
@@ -363,6 +496,7 @@ function ManagementListingRow({ listing, profile, onOpen, onStatus, onPrice, onD
           <Status value={listing.status} />
         </div>
         <p>{listing.category} in {listing.area} - {money(listing.price)}</p>
+        <p className="management-address-line">{listing.address}</p>
         <div className="micro-row">
           <span><MapPin size={13} />{listing.metricLabel}</span>
           <span><Star size={13} />{Number(listing.rating || 0).toFixed(1)}</span>
@@ -374,8 +508,29 @@ function ManagementListingRow({ listing, profile, onOpen, onStatus, onPrice, onD
         <button className="action secondary small" type="submit"><Settings size={15} />Save</button>
         <button className="action secondary small" type="button" onClick={() => onStatus(listing._id, "Available")}>Available</button>
         <button className="action secondary small" type="button" onClick={() => onStatus(listing._id, alternateStatus)}>{alternateStatus}</button>
+        <button className="action secondary small" type="button" onClick={() => onEditAddress(listing)}>Change address</button>
         <button className="icon-button danger" type="button" title="Delete listing" onClick={() => onDelete(listing._id)}><XCircle size={16} /></button>
       </form>
+      {isEditingAddress && (
+        <form className="management-address-editor" onSubmit={(event) => onAddressSubmit(event, listing)}>
+          <div className="management-address-head">
+            <strong>Change address</strong>
+            <button className="icon-button" type="button" title="Cancel address change" onClick={onCancelAddress}><XCircle size={16} /></button>
+          </div>
+          <p>Current address: {listing.address}</p>
+          <AddressAutocomplete
+            idPrefix={`edit-address-${listing._id}`}
+            label="New address"
+            initialLabel={listing.address}
+            resetSignal={addressEditor.resetKey}
+            onSelect={onAddressSelect}
+            required
+          />
+          <button className="action primary small" type="submit" disabled={busy || !addressEditor.selectedAddress}>
+            <MapPin size={15} />Save address
+          </button>
+        </form>
+      )}
     </article>
   );
 }
@@ -407,12 +562,13 @@ export default function App() {
   const [conversationFilter, setConversationFilter] = useState("all");
   const [notificationFilter, setNotificationFilter] = useState("all");
   const [notificationResults, setNotificationResults] = useState(null);
-  const [suggestions, setSuggestions] = useState([]);
-  const [addressQuery, setAddressQuery] = useState("");
   const [selectedAddress, setSelectedAddress] = useState(null);
-  const [addressStatus, setAddressStatus] = useState("idle");
-  const [addressError, setAddressError] = useState("");
-  const [activeAddressIndex, setActiveAddressIndex] = useState(-1);
+  const [createAddressResetKey, setCreateAddressResetKey] = useState(0);
+  const [addressEditor, setAddressEditor] = useState({ listingId: "", selectedAddress: null, resetKey: 0 });
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState("");
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
   const [switchingRole, setSwitchingRole] = useState("");
@@ -473,8 +629,8 @@ export default function App() {
     setSearchDraft((current) => ({ ...current, [field]: value }));
   }
 
-  async function applySearch(nextQuery) {
-    const normalizedQuery = { ...nextQuery, page: 1 };
+  async function applySearch(nextQuery, options = {}) {
+    const normalizedQuery = { ...nextQuery, page: options.resetPage === false ? nextQuery.page : 1 };
     setQuery(normalizedQuery);
     setSearchDraft(normalizedQuery);
     await runAction(async () => {
@@ -484,6 +640,20 @@ export default function App() {
       setDetail(null);
       if (data.results?.[0]) setSelectedListingId(data.results[0]._id);
     });
+  }
+
+  async function applySavedPreferences() {
+    if (!hasSavedSearchPreferences(user)) {
+      notify("Save profile preferences before applying them.");
+      return;
+    }
+    await applySearch(queryFromSavedPreferences(user, initialSearchQuery));
+  }
+
+  async function goToSearchPage(page) {
+    const totalPages = Number(meta.totalPages || 1);
+    const nextPage = Math.max(1, Math.min(Number(page || 1), totalPages));
+    await applySearch({ ...query, page: nextPage }, { resetPage: false });
   }
 
   async function login(nextRole = role) {
@@ -497,51 +667,14 @@ export default function App() {
   }
 
   function resetAddressSearch() {
-    setAddressQuery("");
     setSelectedAddress(null);
-    setSuggestions([]);
-    setAddressStatus("idle");
-    setAddressError("");
-    setActiveAddressIndex(-1);
+    setCreateAddressResetKey((current) => current + 1);
   }
 
-  function updateAddressQuery(value) {
-    setAddressQuery(value);
-    setSelectedAddress(null);
-    setSuggestions([]);
-    setAddressError("");
-    setActiveAddressIndex(-1);
-    const length = value.trim().length;
-    setAddressStatus(length === 0 ? "idle" : length < 3 ? "short" : "debouncing");
-  }
-
-  function selectAddressSuggestion(suggestion) {
-    setSelectedAddress(suggestion);
-    setAddressQuery(suggestion.label);
-    setSuggestions([]);
-    setAddressStatus("selected");
-    setAddressError("");
-    setActiveAddressIndex(-1);
-  }
-
-  function handleAddressKeyDown(event) {
-    if (!suggestions.length) {
-      if (event.key === "Escape") setSuggestions([]);
-      return;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveAddressIndex((current) => (current + 1) % suggestions.length);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveAddressIndex((current) => (current <= 0 ? suggestions.length - 1 : current - 1));
-    } else if (event.key === "Enter" && activeAddressIndex >= 0) {
-      event.preventDefault();
-      selectAddressSuggestion(suggestions[activeAddressIndex]);
-    } else if (event.key === "Escape") {
-      setSuggestions([]);
-      setActiveAddressIndex(-1);
-    }
+  function resetReviewForm() {
+    setReviewRating(0);
+    setReviewComment("");
+    setReviewError("");
   }
 
   async function loadRoleInventory(activeUser = user, activeRole = role) {
@@ -599,11 +732,13 @@ export default function App() {
           api(`/bookings/${activeUser._id}`),
           api(`/notifications/${activeUser._id}`)
         ]);
+        const profileData = await api(`/profile/${activeUser._id}`);
+        setUser(profileData.profile || activeUser);
         setFavorites(favoriteData.favorites || []);
         setConversations(conversationData.conversations || []);
         setBookings(bookingData.bookings || []);
         setNotifications(notificationData.notifications || []);
-      if (resetSelections) {
+        if (resetSelections) {
           setSelectedConversationId("");
           setMessages([]);
         }
@@ -617,9 +752,20 @@ export default function App() {
   async function loadDetail(id = selectedListingId) {
     const target = id || listings[0]?._id;
     if (!target) return;
-    const data = await api(`/listings/${target}/detail`);
+    const eligibilityFallback = { eligible: false, reason: "Sign in before leaving a review." };
+    const [data, reviewData, summaryData, eligibilityData] = await Promise.all([
+      api(`/listings/${target}/detail`),
+      api(`/reviews/${target}`),
+      api(`/reviews/${target}/summary`),
+      user?._id ? api(`/reviews/${target}/eligibility`).catch((error) => ({
+        ...eligibilityFallback,
+        reason: error.message
+      })) : Promise.resolve(eligibilityFallback)
+    ]);
+    data.listing.reviews = reviewData.reviews || data.listing.reviews || [];
     setSelectedListingId(target);
-    setDetail(data);
+    setDetail({ ...data, reviewSummary: summaryData, reviewEligibility: eligibilityData });
+    resetReviewForm();
   }
 
   async function loadMessages(id = selectedConversationId) {
@@ -630,7 +776,12 @@ export default function App() {
 
   useEffect(() => {
     login("business")
-      .then((loggedUser) => loadCore(loggedUser))
+      .then((loggedUser) => {
+        const savedQuery = queryFromSavedPreferences(loggedUser, initialSearchQuery);
+        setQuery(savedQuery);
+        setSearchDraft(savedQuery);
+        return loadCore(loggedUser, savedQuery);
+      })
       .catch((error) => notify(error.message));
   }, []);
 
@@ -639,41 +790,6 @@ export default function App() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
-
-  useEffect(() => {
-    const query = addressQuery.trim();
-    if (selectedAddress && query === selectedAddress.label) return undefined;
-    if (query.length < 3) return undefined;
-
-    const controller = new AbortController();
-    let active = true;
-    const timer = window.setTimeout(async () => {
-      setAddressStatus("loading");
-      setAddressError("");
-      try {
-        const data = await api(`/address-suggestions?q=${encodeURIComponent(query)}`, {
-          signal: controller.signal
-        });
-        if (!active) return;
-        const results = data.suggestions || [];
-        setSuggestions(results);
-        setActiveAddressIndex(results.length ? 0 : -1);
-        setAddressStatus(results.length ? "ready" : "no-results");
-      } catch (error) {
-        if (!active || error.name === "AbortError") return;
-        setSuggestions([]);
-        setActiveAddressIndex(-1);
-        setAddressStatus("error");
-        setAddressError(error.message || "Unable to load address suggestions.");
-      }
-    }, 350);
-
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [addressQuery, selectedAddress]);
 
   useEffect(() => {
     if (view === "workspace") loadDetail();
@@ -782,10 +898,15 @@ export default function App() {
     setNotificationFilter("all");
     setNotificationResults(null);
     resetAddressSearch();
+    cancelListingAddressEdit();
+    resetReviewForm();
     try {
       await runAction(async () => {
         const loggedUser = await login(nextRole);
-        await loadCore(loggedUser, query, { resetSelections: true, activeRole: nextRole });
+        const nextQuery = nextRole === "business" ? queryFromSavedPreferences(loggedUser, initialSearchQuery) : query;
+        setQuery(nextQuery);
+        setSearchDraft(nextQuery);
+        await loadCore(loggedUser, nextQuery, { resetSelections: true, activeRole: nextRole });
       }, `${selectedRole?.label || "Role"} workspace loaded`);
     } finally {
       setSwitchingRole("");
@@ -843,6 +964,41 @@ export default function App() {
       setInventoryListings((current) => current.map((item) => (item._id === id ? data.listing : item)));
       setListings((current) => current.map((item) => (item._id === id ? data.listing : item)));
     }, "Price updated");
+  }
+
+  function editListingAddress(listing) {
+    setAddressEditor({ listingId: listing._id, selectedAddress: null, resetKey: Date.now() });
+  }
+
+  function cancelListingAddressEdit() {
+    setAddressEditor({ listingId: "", selectedAddress: null, resetKey: 0 });
+  }
+
+  function selectListingAddress(suggestion) {
+    setAddressEditor((current) => ({ ...current, selectedAddress: suggestion }));
+  }
+
+  async function updateListingAddress(event, listing) {
+    event.preventDefault();
+    const address = addressEditor.selectedAddress;
+    if (!address) {
+      notify("Select an address suggestion before saving the new address.");
+      return;
+    }
+    await runAction(async () => {
+      const data = await api(`/listings/${listing._id}`, {
+        method: "PUT",
+        body: JSON.stringify({ addressId: address.id })
+      });
+      setInventoryListings((current) => current.map((item) => (item._id === listing._id ? data.listing : item)));
+      setListings((current) => current.map((item) => (item._id === listing._id ? data.listing : item)));
+      setDetail((current) => (
+        current?.listing?._id === listing._id
+          ? { ...current, listing: { ...current.listing, ...data.listing } }
+          : current
+      ));
+      cancelListingAddressEdit();
+    }, "Address updated");
   }
 
   function deleteListing(id) {
@@ -917,22 +1073,41 @@ export default function App() {
     event.preventDefault();
     const listing = selectedListing;
     if (!listing?._id || !user?._id) return;
-    const formElement = event.currentTarget;
-    const form = Object.fromEntries(new FormData(formElement).entries());
-    await runAction(async () => {
+    if (reviewSubmitting) return;
+    const comment = reviewComment.trim();
+    if (!Number.isInteger(reviewRating) || reviewRating < 1 || reviewRating > 5) {
+      setReviewError("Select a 1-5 star rating.");
+      return;
+    }
+    if (comment.length < 3) {
+      setReviewError("Review comment must be at least 3 characters.");
+      return;
+    }
+    if (comment.length > 1000) {
+      setReviewError("Review comment must be 1000 characters or fewer.");
+      return;
+    }
+
+    setReviewSubmitting(true);
+    setReviewError("");
+    try {
       await api("/reviews", {
         method: "POST",
         body: JSON.stringify({
           listingId: listing._id,
-          reviewerId: user._id,
-          rating: Number(form.rating),
-          comment: form.comment
+          rating: reviewRating,
+          comment
         })
       });
-      formElement.reset();
       await loadCore(user, query, { activeRole: role });
       await loadDetail(listing._id);
-    }, "Review submitted");
+      notify("Review submitted");
+    } catch (error) {
+      setReviewError(error.message);
+      notify(error.message);
+    } finally {
+      setReviewSubmitting(false);
+    }
   }
 
   async function markNotificationRead(id) {
@@ -1114,17 +1289,22 @@ export default function App() {
 
   function renderMarketplace() {
     const summary = meta.summary || {};
+    const pages = visiblePages(meta.page, meta.totalPages);
     return (
       <>
         <PageHeader eyebrow="Marketplace" title="Commercial Spaces and Setup Services" meta={<Pill tone="neutral">{meta.total || 0} matches</Pill>} />
         <form className="filter-bar" onSubmit={submitSearch}>
           <label>Area<input name="area" value={searchDraft.area} onChange={(event) => updateSearchDraft("area", event.target.value)} /></label>
           <label>Type<select name="type" value={searchDraft.type} onChange={(event) => updateSearchDraft("type", event.target.value)}><option value="all">All</option><option value="property">Property</option><option value="service">Service</option></select></label>
-          <label>Category<select name="category" value={searchDraft.category} onChange={(event) => updateSearchDraft("category", event.target.value)}><option value="all">All</option><option>Office</option><option>Shop</option><option>Interior</option><option>ISP</option><option>Electrician</option></select></label>
-          <label>Max price<input name="maxPrice" type="number" value={searchDraft.maxPrice} onChange={(event) => updateSearchDraft("maxPrice", event.target.value)} /></label>
-          <label>Min size<input name="minSize" type="number" value={searchDraft.minSize} onChange={(event) => updateSearchDraft("minSize", event.target.value)} /></label>
-          <label>Sort<select name="sort" value={searchDraft.sort} onChange={(event) => updateSearchDraft("sort", event.target.value)}><option value="distance">Distance</option><option value="price">Price</option><option value="rating">Rating</option><option value="newest">Newest</option></select></label>
+          <label>Category<select name="category" value={searchDraft.category} onChange={(event) => updateSearchDraft("category", event.target.value)}><option value="all">All</option>{categoryValues.map((category) => <option key={category}>{category}</option>)}</select></label>
+          <label>Min price<input name="minPrice" type="number" min="0" value={searchDraft.minPrice} onChange={(event) => updateSearchDraft("minPrice", event.target.value)} /></label>
+          <label>Max price<input name="maxPrice" type="number" min="0" value={searchDraft.maxPrice} onChange={(event) => updateSearchDraft("maxPrice", event.target.value)} /></label>
+          <label>Min size<input name="minSize" type="number" min="0" value={searchDraft.minSize} onChange={(event) => updateSearchDraft("minSize", event.target.value)} /></label>
+          <label>Sort<select name="sort" value={searchDraft.sort} onChange={(event) => updateSearchDraft("sort", event.target.value)}><option value="distance">Distance</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option><option value="rating">Rating</option><option value="newest">Newest</option></select></label>
           <button className="action primary" type="submit"><SlidersHorizontal size={16} />Apply</button>
+          {hasSavedSearchPreferences(user) ? (
+            <button className="action secondary" type="button" onClick={applySavedPreferences}><Bookmark size={16} />Use Saved Preferences</button>
+          ) : null}
           <button className="action secondary" type="button" onClick={() => applySearch(initialSearchQuery)}>Reset</button>
         </form>
         <div className="photo-option-grid">
@@ -1166,6 +1346,26 @@ export default function App() {
             {listings.length ? listings.map((listing) => (
               <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} />
             )) : <Empty title="No matches" />}
+            {Number(meta.totalPages || 1) > 1 ? (
+              <div className="pagination-controls" aria-label="Listing pages">
+                <button className="icon-button" type="button" onClick={() => goToSearchPage(Number(meta.page || 1) - 1)} disabled={Number(meta.page || 1) <= 1} title="Previous page" aria-label="Previous page">
+                  <ChevronLeft size={16} />
+                </button>
+                {pages.map((pageNumber) => (
+                  <button
+                    className={`page-button ${Number(meta.page || 1) === pageNumber ? "active" : ""}`}
+                    type="button"
+                    key={pageNumber}
+                    onClick={() => goToSearchPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+                <button className="icon-button" type="button" onClick={() => goToSearchPage(Number(meta.page || 1) + 1)} disabled={Number(meta.page || 1) >= Number(meta.totalPages || 1)} title="Next page" aria-label="Next page">
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
       </>
@@ -1183,65 +1383,13 @@ export default function App() {
             <form className="panel form-panel" onSubmit={createListing}>
               <div className="panel-head"><h3>{profile.createTitle}</h3><Pill tone="neutral">{profile.badge}</Pill></div>
               <input type="hidden" name="listingType" defaultValue={profile.listingType} />
-              <div
-                className="address-autocomplete"
-                onBlur={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget)) {
-                    setSuggestions([]);
-                    setActiveAddressIndex(-1);
-                  }
-                }}
-              >
-                <label>
-                  Address search
-                  <div className="address-input-wrap">
-                    <input
-                      name="address"
-                      value={addressQuery}
-                      onChange={(event) => updateAddressQuery(event.target.value)}
-                      onKeyDown={handleAddressKeyDown}
-                      placeholder="Type at least 3 characters"
-                      autoComplete="off"
-                      role="combobox"
-                      aria-autocomplete="list"
-                      aria-expanded={suggestions.length > 0}
-                      aria-controls="address-suggestion-list"
-                      aria-activedescendant={activeAddressIndex >= 0 ? `address-option-${activeAddressIndex}` : undefined}
-                      required
-                    />
-                    {suggestions.length > 0 && (
-                      <div className="address-suggestion-menu" id="address-suggestion-list" role="listbox">
-                        {suggestions.map((item, index) => (
-                          <button
-                            id={`address-option-${index}`}
-                            type="button"
-                            role="option"
-                            aria-selected={index === activeAddressIndex}
-                            className={index === activeAddressIndex ? "active" : ""}
-                            key={item.id}
-                            onMouseDown={(event) => event.preventDefault()}
-                            onMouseEnter={() => setActiveAddressIndex(index)}
-                            onClick={() => selectAddressSuggestion(item)}
-                          >
-                            <MapPin size={15} />
-                            <span><strong>{item.label}</strong><small>{item.area}</small></span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </label>
-                {addressStatus === "short" && <p className="address-help">Enter at least 3 characters.</p>}
-                {(addressStatus === "debouncing" || addressStatus === "loading") && <p className="address-help">Searching Mapbox…</p>}
-                {addressStatus === "no-results" && <p className="address-help">No matching addresses found.</p>}
-                {addressStatus === "error" && <p className="address-help error">{addressError}</p>}
-                {selectedAddress && (
-                  <div className="selected-address" aria-live="polite">
-                    <CheckCircle2 size={16} />
-                    <span><strong>{selectedAddress.label}</strong><small>{selectedAddress.lat.toFixed(6)}, {selectedAddress.lng.toFixed(6)}</small></span>
-                  </div>
-                )}
-              </div>
+              <AddressAutocomplete
+                idPrefix="create-listing-address"
+                label="Address search"
+                resetSignal={createAddressResetKey}
+                onSelect={setSelectedAddress}
+                required
+              />
               <input type="hidden" name="addressId" value={selectedAddress?.id || ""} readOnly />
               <input type="hidden" name="area" value={selectedAddress?.area || ""} readOnly />
               <input type="hidden" name="lat" value={selectedAddress?.lat ?? ""} readOnly />
@@ -1280,10 +1428,16 @@ export default function App() {
                   key={listing._id}
                   listing={listing}
                   profile={profile}
+                  addressEditor={addressEditor}
+                  busy={busy}
                   onOpen={openListing}
                   onStatus={updateListingStatus}
                   onPrice={updateListingPrice}
                   onDelete={deleteListing}
+                  onEditAddress={editListingAddress}
+                  onCancelAddress={cancelListingAddressEdit}
+                  onAddressSelect={selectListingAddress}
+                  onAddressSubmit={updateListingAddress}
                 />
               ) : (
                 <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} />
@@ -1369,6 +1523,11 @@ export default function App() {
   function renderWorkspace() {
     const listing = selectedListing;
     const reviews = detail?.listing?.reviews || [];
+    const reviewSummary = detail?.reviewSummary || {};
+    const reviewEligibility = detail?.reviewEligibility;
+    const averageRating = Number(reviewSummary.averageRating ?? listing?.rating ?? 0);
+    const reviewCount = Number(reviewSummary.reviewCount ?? listing?.reviewCount ?? reviews.length ?? 0);
+    const distribution = reviewSummary.distribution || {};
     return (
       <>
         <PageHeader eyebrow="Workspace" title={listing?.title || "Client Workspace"} meta={listing && <Status value={listing.status} />} />
@@ -1393,7 +1552,11 @@ export default function App() {
                 </div>
                 <div className="owner-line">
                   <IconFrame icon={UserRound} tone="blue" />
-                  <div><strong>{listing.owner?.name || "Owner"}</strong><p>{listing.owner?.role || listing.listingType} - {listing.owner?.verificationStatus || "verified"}</p></div>
+                  <div>
+                    <strong>{listing.owner?.name || "Owner"}</strong>
+                    <p>{listing.owner?.role || listing.listingType} - {listing.owner?.verificationStatus || "verified"}</p>
+                    <ProviderRatingLine profile={listing.owner} />
+                  </div>
                   <button type="button" className="action primary small" onClick={() => startConversation(listing._id)}><MessageSquareText size={15} />Message</button>
                 </div>
               </>
@@ -1417,32 +1580,95 @@ export default function App() {
             ))}
           </div>
           <div className="panel">
-            <div className="panel-head"><h3>Reviews</h3><Pill tone="neutral">{reviews.length}</Pill></div>
-            {reviews.map((review) => (
-              <div className="review-row" key={review._id}>
-                <span>{review.rating}/5</span>
-                <div><strong>{review.reviewer?.name || "Reviewer"}</strong><p>{review.comment}</p></div>
+            <div className="panel-head"><h3>Reviews</h3><Pill tone="neutral">{reviewCount}</Pill></div>
+            <div className="review-summary">
+              <div className="review-score">
+                <StarMeter rating={averageRating} size={18} />
+                <strong>{averageRating.toFixed(1)}</strong>
+                <span>{reviewCount} review{reviewCount === 1 ? "" : "s"}</span>
               </div>
-            ))}
-            {listing && (
-              <form className="review-form" onSubmit={submitReview}>
-                <div className="field-row">
-                  <label>Rating<select name="rating" defaultValue="5"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Needs work</option><option value="1">1 - Poor</option></select></label>
-                  <label>Reviewer<input value={user?.name || "Business owner"} readOnly /></label>
+              <div className="rating-distribution">
+                {[5, 4, 3, 2, 1].map((ratingValue) => {
+                  const count = Number(distribution[String(ratingValue)] || 0);
+                  const width = reviewCount ? Math.round((count / reviewCount) * 100) : 0;
+                  return (
+                    <div className="rating-bar" key={ratingValue}>
+                      <span>{ratingValue}</span>
+                      <i><b style={{ width: `${width}%` }} /></i>
+                      <strong>{count}</strong>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {reviews.length ? reviews.map((review) => (
+              <div className="review-row" key={review._id}>
+                <span>
+                  <StarMeter rating={review.rating} size={13} />
+                  <strong>{review.rating}/5</strong>
+                </span>
+                <div>
+                  <div className="row-line">
+                    <strong>{review.reviewer?.name || "Reviewer"}</strong>
+                    <small>{shortDate(review.createdAt)}</small>
+                  </div>
+                  <p>{review.comment}</p>
                 </div>
-                <label>Comment<textarea name="comment" defaultValue="Helpful listing and responsive owner." /></label>
-                <button className="action primary" type="submit"><Star size={16} />Submit Review</button>
-              </form>
+              </div>
+            )) : <Empty title="No reviews yet." />}
+            {listing && (
+              reviewEligibility?.eligible ? (
+                <form className="review-form" onSubmit={submitReview}>
+                  <label>
+                    Rating
+                    <StarRatingInput
+                      value={reviewRating}
+                      onChange={(nextRating) => {
+                        setReviewRating(nextRating);
+                        setReviewError("");
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Comment
+                    <textarea
+                      name="comment"
+                      value={reviewComment}
+                      onChange={(event) => {
+                        setReviewComment(event.target.value);
+                        setReviewError("");
+                      }}
+                      maxLength={1000}
+                      placeholder="Share your experience with this listing."
+                    />
+                  </label>
+                  {reviewError && <p className="form-error">{reviewError}</p>}
+                  <button
+                    className="action primary"
+                    type="submit"
+                    disabled={reviewSubmitting || !reviewRating || reviewComment.trim().length < 3}
+                  >
+                    <Star size={16} />{reviewSubmitting ? "Submitting" : "Submit Review"}
+                  </button>
+                </form>
+              ) : (
+                <div className="review-notice">
+                  <IconFrame icon={ShieldCheck} tone={user?.role === "business-owner" ? "amber" : "blue"} />
+                  <p>{reviewEligibility?.reason || "Checking review eligibility..."}</p>
+                </div>
+              )
             )}
           </div>
-          <form className="panel form-panel" onSubmit={updateProfile}>
+          <form className="panel form-panel" onSubmit={updateProfile} key={user?._id || "profile-form"}>
             <div className="panel-head"><h3>Profile</h3><Pill tone="neutral">{user?.role}</Pill></div>
+            <ProviderRatingLine profile={user} />
             <label>Business type<input name="businessType" defaultValue={user?.businessType || ""} /></label>
             <label>Preferred area<input name="preferredArea" defaultValue={user?.preferredArea || ""} /></label>
             <div className="field-row">
-              <label>Budget min<input name="budgetMin" type="number" defaultValue={user?.budgetMin || 0} /></label>
-              <label>Budget max<input name="budgetMax" type="number" defaultValue={user?.budgetMax || 0} /></label>
+              <label>Budget min<input name="budgetMin" type="number" min="0" defaultValue={user?.budgetMin || 0} /></label>
+              <label>Budget max<input name="budgetMax" type="number" min="0" defaultValue={user?.budgetMax || 0} /></label>
             </div>
+            <label>Preferred min size<input name="minSize" type="number" min="0" defaultValue={user?.minSize || 0} /></label>
             <label>Service need<input name="serviceNeed" defaultValue={user?.serviceNeed || ""} /></label>
             <button className="action primary" type="submit"><Bookmark size={16} />Save Profile</button>
           </form>
@@ -1645,7 +1871,11 @@ export default function App() {
         </div>
         <div className="account-chip">
           <span className={health?.ok ? "live-dot" : "live-dot muted"} />
-          <div><strong>{user?.name || "Connecting"}</strong><p>{user?.role || "session"}</p></div>
+          <div>
+            <strong>{user?.name || "Connecting"}</strong>
+            <p>{user?.role || "session"}</p>
+            <ProviderRatingLine profile={user} />
+          </div>
         </div>
       </header>
 
