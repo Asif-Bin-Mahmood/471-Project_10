@@ -3493,3 +3493,88 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* Member 2: Firebase Storage photo and portfolio uploads */
+.photo-upload-field {
+  display: grid;
+  gap: 8px;
+}
+
+.photo-upload-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.photo-upload-head small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.photo-file-input {
+  width: 100%;
+}
+
+.photo-upload-status,
+.photo-upload-error {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.photo-upload-status {
+  color: var(--green);
+}
+
+.photo-upload-error {
+  color: var(--rose);
+}
+
+.photo-upload-list {
+  display: grid;
+  gap: 8px;
+}
+
+.photo-upload-item {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.photo-upload-item img,
+.photo-upload-placeholder {
+  width: 52px;
+  height: 42px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--surface-3);
+}
+
+.photo-upload-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.photo-upload-item > span:not(.photo-upload-placeholder) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.84rem;
+}
+
+.photo-upload-item button {
+  border: 0;
+  background: transparent;
+  color: var(--rose);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+}

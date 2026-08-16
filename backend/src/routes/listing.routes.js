@@ -1,4 +1,5 @@
 import express from "express";
+import { uploadPhoto } from "../controllers/upload.controller.js";
 import {
   createListing,
   deleteListing,
@@ -30,6 +31,13 @@ router.get(
   requireAuth,
   requireRole("property-owner", "service-provider", "admin"),
   getMyListings
+);
+router.post(
+  "/uploads/listing-photo",
+  requireAuth,
+  requireRole("property-owner", "service-provider", "admin"),
+  express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "8mb" }),
+  uploadPhoto
 );
 router.post("/listings", requireAuth, createListing);
 router.put("/listings/:id", requireAuth, updateListing);

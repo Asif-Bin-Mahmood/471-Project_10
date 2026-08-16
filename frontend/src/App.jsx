@@ -40,6 +40,7 @@ import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 import AuthPage from "./components/AuthPage.jsx";
 import { MessagesPage, NotificationsPage } from "./components/Communications.jsx";
 import ListingMap from "./components/ListingMap.jsx";
+import PhotoUploadField from "./components/PhotoUploadField.jsx";
 import { connectSocket, disconnectSocket, getSocket } from "./realtime/socket.js";
 
 const roles = [
@@ -506,6 +507,7 @@ function ListingRow({ listing, onOpen, onSave, onBook, onMessage, canEngage = fa
 // Member 2 - Module 1 & 2: one editor is reused for property and service listings.
 function ListingEditForm({ listing, busy, onCancel, onSave }) {
   const [selectedAddress, setSelectedAddress] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const categories = listing.listingType === "service" ? serviceCategoryValues : propertyTypeValues;
   const statuses = listing.listingType === "service" ? ["Available", "Busy"] : ["Available", "Leased"];
 
@@ -553,7 +555,12 @@ function ListingEditForm({ listing, busy, onCancel, onSave }) {
       ) : null}
       <label>{listing.listingType === "service" ? "Service features" : "Facilities"}<input name="facilities" defaultValue={(listing.facilities || []).join(", ")} /></label>
       <label>Coverage areas{listing.listingType === "property" ? " (optional)" : ""}<input name="coverageAreas" defaultValue={(listing.coverageAreas || []).join(", ")} required={listing.listingType === "service"} /></label>
-      <label>Photos<input name="photos" defaultValue={(listing.photos || []).join(", ")} /></label>
+      <PhotoUploadField
+        listingType={listing.listingType}
+        initialUrls={listing.photos || []}
+        label={listing.listingType === "service" ? "Portfolio photos" : "Property photos"}
+        onUploadingChange={setPhotoUploading}
+      />
       <label>{listing.listingType === "service" ? "Portfolio / service description" : "Description"}<textarea name="description" defaultValue={listing.description || ""} /></label>
       <AddressAutocomplete
         idPrefix={`full-edit-address-${listing._id}`}
@@ -564,7 +571,7 @@ function ListingEditForm({ listing, busy, onCancel, onSave }) {
       <p className="editor-help">Keep the current address text unchanged to preserve the existing coordinates, or select a suggestion to update them.</p>
       <div className="listing-edit-actions">
         <button className="action secondary" type="button" onClick={onCancel}>Cancel</button>
-        <button className="action primary" type="submit" disabled={busy}><Settings size={16} />Save all changes</button>
+        <button className="action primary" type="submit" disabled={busy || photoUploading}><Settings size={16} />{photoUploading ? "Uploading photos..." : "Save all changes"}</button>
       </div>
     </form>
   );
@@ -677,6 +684,8 @@ export default function App() {
   const [notificationResults, setNotificationResults] = useState(null);
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [createAddressResetKey, setCreateAddressResetKey] = useState(0);
+  const [createPhotoResetKey, setCreatePhotoResetKey] = useState(0);
+  const [createPhotoUploading, setCreatePhotoUploading] = useState(false);
   const [addressEditor, setAddressEditor] = useState({ listingId: "", selectedAddress: null, resetKey: 0 });
   const [editingListingId, setEditingListingId] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
@@ -1153,11 +1162,12 @@ export default function App() {
     form.location = { lat: selectedAddress.lat, lng: selectedAddress.lng };
     form.facilities = commaList(form.facilities);
     form.coverageAreas = commaList(form.coverageAreas);
-    form.photos = commaList(form.photos || "uploaded-photo.jpg");
+    form.photos = commaList(form.photos);
     await runAction(async () => {
       await api("/listings", { method: "POST", body: JSON.stringify(form) });
       await loadCore(user, query, { activeRole: role });
       formElement.reset();
+      setCreatePhotoResetKey((current) => current + 1);
       resetAddressSearch();
     }, "Listing saved");
   }
@@ -1654,9 +1664,14 @@ export default function App() {
                 )}
                 <label>{profile.listingType === "service" ? "Service features" : "Facilities"}<input name="facilities" defaultValue={profile.defaultFacilities} /></label>
                 <label>Coverage areas{profile.listingType === "property" ? " (optional)" : ""}<input name="coverageAreas" defaultValue={profile.defaultCoverage} required={profile.listingType === "service"} /></label>
-                <label>Photos<input name="photos" defaultValue={profile.defaultPhotos} /></label>
+                <PhotoUploadField
+                  listingType={profile.listingType}
+                  label={profile.listingType === "service" ? "Portfolio photos" : "Property photos"}
+                  resetSignal={createPhotoResetKey}
+                  onUploadingChange={setCreatePhotoUploading}
+                />
                 <label>{profile.listingType === "service" ? "Portfolio / service description" : "Description"}<textarea name="description" defaultValue={profile.defaultDescription} /></label>
-                <button className="action primary" type="submit" disabled={busy}><ListPlus size={16} />Save {profile.listingType === "service" ? "Service" : "Property"}</button>
+                <button className="action primary" type="submit" disabled={busy || createPhotoUploading}><ListPlus size={16} />{createPhotoUploading ? "Uploading photos..." : `Save ${profile.listingType === "service" ? "Service" : "Property"}`}</button>
               </form>
             ) : (
               <div className="panel role-workflow-panel verification-gate">
