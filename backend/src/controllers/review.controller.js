@@ -1,6 +1,8 @@
 import Listing from "../models/Listing.js";
 import Notification from "../models/Notification.js";
 import Review from "../models/Review.js";
+import { sendEmail } from "../services/email.service.js";
+import { newReviewEmail } from "../templates/email.templates.js";
 
 async function updateListingRating(listingId) {
   const reviews = await Review.find({ listing: listingId });
@@ -58,6 +60,22 @@ export async function createReview(req, res, next) {
       message: `${req.user.name} reviewed ${listing.title}.`,
       channel: "email"
     });
+    try {
+      await listing.populate("owner");
+      await sendEmail({
+        to: listing.owner?.email,
+        ...newReviewEmail({
+          recipientName: listing.owner?.name,
+          reviewerName: req.user.name,
+          listingTitle: listing.title,
+          rating,
+          comment
+        }),
+        event: "review.submitted"
+      });
+    } catch (emailError) {
+      console.error(`[email] review.submitted failed: ${emailError.message}`);
+    }
     res.status(201).json({ review, listing: updatedListing });
   } catch (error) {
     next(error);

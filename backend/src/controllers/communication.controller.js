@@ -4,6 +4,8 @@ import Conversation from "../models/Conversation.js";
 import Listing from "../models/Listing.js";
 import Notification from "../models/Notification.js";
 import { emitNewMessage, joinConversationParticipants } from "../realtime/socket.js";
+import { sendEmail } from "../services/email.service.js";
+import { bookingAcceptedEmail, bookingRequestEmail, newMessageEmail } from "../templates/email.templates.js";
 import { canAccessUser } from "../utils/auth.js";
 
 function isConversationParticipant(conversation, userId) {
@@ -103,6 +105,22 @@ export async function createMessage(req, res, next) {
     });
     await conversation.populate("listing participants messages.sender");
     const message = conversation.messages.at(-1);
+    for (const recipient of conversation.participants.filter((participant) => String(participant._id) !== String(req.user._id))) {
+      try {
+        await sendEmail({
+          to: recipient.email,
+          ...newMessageEmail({
+            recipientName: recipient.name,
+            senderName: req.user.name,
+            conversationSubject: conversation.subject,
+            body
+          }),
+          event: "inquiry.message"
+        });
+      } catch (emailError) {
+        console.error(`[email] inquiry.message failed: ${emailError.message}`);
+      }
+    }
     emitNewMessage(req.app.get("io"), conversation._id, message);
     res.status(201).json({ conversation, message });
   } catch (error) {
@@ -155,6 +173,22 @@ export async function createBooking(req, res, next) {
       metadata: { requestType: booking.requestType, listing: listing.title }
     });
     await booking.populate("listing requester receiver");
+    try {
+      await sendEmail({
+        to: booking.receiver?.email,
+        ...bookingRequestEmail({
+          recipientName: booking.receiver?.name,
+          requesterName: requester.name,
+          listingTitle: booking.listing?.title || listing.title,
+          requestType: booking.requestType,
+          proposedAt: booking.proposedAt,
+          notes: booking.notes
+        }),
+        event: "booking.requested"
+      });
+    } catch (emailError) {
+      console.error(`[email] booking.requested failed: ${emailError.message}`);
+    }
     res.status(201).json({ booking });
   } catch (error) {
     next(error);
@@ -189,6 +223,22 @@ export async function respondToBooking(req, res, next) {
       metadata: { status: booking.status }
     });
     await booking.populate("listing requester receiver");
+    if (booking.status === "accepted") {
+      try {
+        await sendEmail({
+          to: booking.requester?.email,
+          ...bookingAcceptedEmail({
+            recipientName: booking.requester?.name,
+            listingTitle: booking.listing?.title || "your OfficeKhoj listing",
+            proposedAt: booking.proposedAt,
+            alternateAt: booking.alternateAt
+          }),
+          event: "booking.accepted"
+        });
+      } catch (emailError) {
+        console.error(`[email] booking.accepted failed: ${emailError.message}`);
+      }
+    }
     res.json({ booking });
   } catch (error) {
     next(error);
