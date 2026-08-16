@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   LifeBuoy,
   ListPlus,
+  LogOut,
   Mail,
   MapPin,
   MessageSquareText,
@@ -34,18 +35,12 @@ import {
   Wrench,
   XCircle
 } from "lucide-react";
-import { api, setAuthToken } from "./api/client.js";
+import { api, getAuthToken, setAuthToken } from "./api/client.js";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
+import AuthPage from "./components/AuthPage.jsx";
 import { MessagesPage, NotificationsPage } from "./components/Communications.jsx";
 import ListingMap from "./components/ListingMap.jsx";
 import { connectSocket, disconnectSocket, getSocket } from "./realtime/socket.js";
-
-const demoLogins = {
-  business: { email: "obaeed@officekhoj.bd", password: "demo123" },
-  property: { email: "owner@officekhoj.bd", password: "demo123" },
-  service: { email: "interior@officekhoj.bd", password: "demo123" },
-  admin: { email: "admin@officekhoj.bd", password: "admin123" }
-};
 
 const roles = [
   { key: "business", label: "Business", icon: BriefcaseBusiness },
@@ -60,6 +55,28 @@ const roleLandingViews = {
   service: "listings",
   admin: "admin"
 };
+
+const roleKeyByUserRole = {
+  "business-owner": "business",
+  "property-owner": "property",
+  "service-provider": "service",
+  admin: "admin"
+};
+
+const roleViewAccess = {
+  business: new Set(["dashboard", "marketplace", "pipeline", "messages", "notifications", "workspace", "support"]),
+  property: new Set(["dashboard", "marketplace", "listings", "pipeline", "messages", "notifications", "workspace", "support"]),
+  service: new Set(["dashboard", "marketplace", "listings", "pipeline", "messages", "notifications", "workspace", "support"]),
+  admin: new Set(["dashboard", "marketplace", "messages", "notifications", "workspace", "operations", "support", "admin"])
+};
+
+function roleKeyForUser(user) {
+  return roleKeyByUserRole[user?.role] || "business";
+}
+
+function canAccessView(role, view) {
+  return Boolean(roleViewAccess[role]?.has(view));
+}
 
 const navItems = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -452,7 +469,7 @@ function PhotoImage({ listing, photo, className, alt }) {
   );
 }
 
-function ListingRow({ listing, onOpen, onSave, onBook, onMessage }) {
+function ListingRow({ listing, onOpen, onSave, onBook, onMessage, canEngage = false }) {
   const TypeIcon = listing.listingType === "service" ? Wrench : Building2;
   return (
     <article className="listing-row">
@@ -473,9 +490,13 @@ function ListingRow({ listing, onOpen, onSave, onBook, onMessage }) {
         </div>
       </div>
       <div className="row-actions">
-        <button type="button" className="icon-button" title="Save / remove favorite" onClick={() => onSave(listing._id)}><Heart size={16} /></button>
-        <button type="button" className="icon-button" title="Message" onClick={() => onMessage(listing._id)}><Mail size={16} /></button>
-        <button type="button" className="action primary small" onClick={() => onBook(listing._id)}><CalendarCheck size={15} />Book</button>
+        {canEngage ? (
+          <>
+            <button type="button" className="icon-button" title="Save / remove favorite" onClick={() => onSave(listing._id)}><Heart size={16} /></button>
+            <button type="button" className="icon-button" title="Message" onClick={() => onMessage(listing._id)}><Mail size={16} /></button>
+            <button type="button" className="action primary small" onClick={() => onBook(listing._id)}><CalendarCheck size={15} />Book</button>
+          </>
+        ) : null}
         <button type="button" className="action secondary small" onClick={() => onOpen(listing._id)}>Open<ChevronRight size={15} /></button>
       </div>
     </article>
@@ -629,6 +650,8 @@ export default function App() {
   const [view, setView] = useState(() => viewFromPathname(window.location.pathname));
   const [role, setRole] = useState("business");
   const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState("");
   const [health, setHealth] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [operations, setOperations] = useState(null);
@@ -662,9 +685,9 @@ export default function App() {
   const [reviewError, setReviewError] = useState("");
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
-  const [switchingRole, setSwitchingRole] = useState("");
   const [deleteTargetId, setDeleteTargetId] = useState("");
   const toastTimer = useRef(null);
+  const authBootstrapRef = useRef(false);
   const conversationsRef = useRef([]);
   const selectedConversationIdRef = useRef("");
 
@@ -687,6 +710,8 @@ export default function App() {
     [operations]
   );
   const managementProfile = managementProfiles[role] || managementProfiles.business;
+  const currentRole = roles.find((item) => item.key === role) || roles[0];
+  const CurrentRoleIcon = currentRole.icon;
 
   function notify(message) {
     setToast(message);
@@ -694,12 +719,16 @@ export default function App() {
     toastTimer.current = window.setTimeout(() => setToast(""), 2800);
   }
 
-  function navigateToView(nextView, { replace = false } = {}) {
-    const nextPath = pathnameForView(nextView);
+  function navigateToView(nextView, { replace = false, activeRole = role } = {}) {
+    const allowedView = canAccessView(activeRole, nextView)
+      ? nextView
+      : roleLandingViews[activeRole] || "dashboard";
+    if (allowedView !== nextView) notify("That workspace is not available for your account role.");
+    const nextPath = pathnameForView(allowedView);
     if (window.location.pathname !== nextPath) {
-      window.history[replace ? "replaceState" : "pushState"]({ view: nextView }, "", nextPath);
+      window.history[replace ? "replaceState" : "pushState"]({ view: allowedView }, "", nextPath);
     }
-    setView(nextView);
+    setView(allowedView);
   }
 
   async function runAction(action, success) {
@@ -747,14 +776,98 @@ export default function App() {
     await applySearch({ ...query, page: nextPage }, { resetPage: false });
   }
 
-  async function login(nextRole = role) {
-    const data = await api("/auth/login", {
-      method: "POST",
-      body: JSON.stringify(demoLogins[nextRole])
+  function resetWorkspaceData() {
+    setHealth(null);
+    setDashboard(null);
+    setOperations(null);
+    setAdmin({ pendingUsers: [], pendingListings: [], reports: [] });
+    setListings([]);
+    setInventoryListings([]);
+    setFavorites([]);
+    setConversations([]);
+    setMessages([]);
+    setBookings([]);
+    setNotifications([]);
+    setSelectedConversationId("");
+    setSelectedListingId("");
+    setDetail(null);
+  }
+
+  async function establishSession(data) {
+    if (data.token) setAuthToken(data.token);
+    const authenticatedUser = data.user;
+    const nextRole = roleKeyForUser(authenticatedUser);
+    const nextQuery = nextRole === "business"
+      ? queryFromSavedPreferences(authenticatedUser, initialSearchQuery)
+      : initialSearchQuery;
+
+    setUser(authenticatedUser);
+    setRole(nextRole);
+    setQuery(nextQuery);
+    setSearchDraft(nextQuery);
+    navigateToView(roleLandingViews[nextRole] || "dashboard", {
+      replace: true,
+      activeRole: nextRole
     });
-    setAuthToken(data.token);
-    setUser(data.user);
-    return data.user;
+    await loadCore(authenticatedUser, nextQuery, {
+      resetSelections: true,
+      activeRole: nextRole
+    });
+    return authenticatedUser;
+  }
+
+  async function login(credentials) {
+    setBusy(true);
+    setAuthError("");
+    try {
+      const data = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify(credentials)
+      });
+      await establishSession(data);
+    } catch (error) {
+      setAuthToken(null);
+      resetWorkspaceData();
+      setUser(null);
+      setAuthError(error.message);
+    } finally {
+      setAuthReady(true);
+      setBusy(false);
+    }
+  }
+
+  async function register(registration) {
+    setBusy(true);
+    setAuthError("");
+    try {
+      const data = await api("/auth/register", {
+        method: "POST",
+        body: JSON.stringify(registration)
+      });
+      await establishSession(data);
+      notify(data.user.verificationStatus === "pending"
+        ? "Account created. Admin verification is pending."
+        : "Account created successfully.");
+    } catch (error) {
+      setAuthToken(null);
+      resetWorkspaceData();
+      setUser(null);
+      setAuthError(error.message);
+    } finally {
+      setAuthReady(true);
+      setBusy(false);
+    }
+  }
+
+  function logout() {
+    disconnectSocket();
+    setAuthToken(null);
+    resetWorkspaceData();
+    setUser(null);
+    setRole("business");
+    setAuthError("");
+    setView("dashboard");
+    window.history.replaceState({ view: "dashboard" }, "", "/");
   }
 
   function resetAddressSearch() {
@@ -874,21 +987,37 @@ export default function App() {
   }
 
   useEffect(() => {
-    login("business")
-      .then((loggedUser) => {
-        const savedQuery = queryFromSavedPreferences(loggedUser, initialSearchQuery);
-        setQuery(savedQuery);
-        setSearchDraft(savedQuery);
-        return loadCore(loggedUser, savedQuery);
+    if (authBootstrapRef.current) return;
+    authBootstrapRef.current = true;
+
+    if (!getAuthToken()) {
+      setAuthReady(true);
+      return;
+    }
+
+    setBusy(true);
+    api("/auth/me")
+      .then((data) => establishSession(data))
+      .catch(() => {
+        setAuthToken(null);
+        resetWorkspaceData();
+        setUser(null);
+        setAuthError("Your session expired. Please sign in again.");
       })
-      .catch((error) => notify(error.message));
+      .finally(() => {
+        setAuthReady(true);
+        setBusy(false);
+      });
   }, []);
 
   useEffect(() => {
-    const handlePopState = () => setView(viewFromPathname(window.location.pathname));
+    const handlePopState = () => {
+      const requestedView = viewFromPathname(window.location.pathname);
+      setView(canAccessView(role, requestedView) ? requestedView : roleLandingViews[role]);
+    };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [role]);
 
   useEffect(() => {
     if (view === "workspace") loadDetail();
@@ -983,34 +1112,12 @@ export default function App() {
     socket.emit("conversation:join", selectedConversationId);
   }, [selectedConversationId, socketStatus]);
 
-  async function switchRole(nextRole) {
-    if (switchingRole) return;
-    const selectedRole = roles.find((item) => item.key === nextRole);
-    setSwitchingRole(nextRole);
-    setRole(nextRole);
-    navigateToView(roleLandingViews[nextRole] || "dashboard", { replace: true });
-    setDetail(null);
-    setMessages([]);
-    setSelectedConversationId("");
-    setConversationSearch("");
-    setConversationFilter("all");
-    setNotificationFilter("all");
-    setNotificationResults(null);
-    resetAddressSearch();
-    cancelListingAddressEdit();
-    setEditingListingId("");
-    resetReviewForm();
-    try {
-      await runAction(async () => {
-        const loggedUser = await login(nextRole);
-        const nextQuery = nextRole === "business" ? queryFromSavedPreferences(loggedUser, initialSearchQuery) : query;
-        setQuery(nextQuery);
-        setSearchDraft(nextQuery);
-        await loadCore(loggedUser, nextQuery, { resetSelections: true, activeRole: nextRole });
-      }, `${selectedRole?.label || "Role"} workspace loaded`);
-    } finally {
-      setSwitchingRole("");
+  function openRoleWorkspace(targetRole) {
+    if (targetRole !== role) {
+      notify(`Sign out and use a ${roles.find((item) => item.key === targetRole)?.label || targetRole} account to open that workspace.`);
+      return;
     }
+    navigateToView(roleLandingViews[targetRole] || "dashboard");
   }
 
   // Member 1 - Module 1 & 2: send the current location/filter values to the unified search API.
@@ -1356,7 +1463,7 @@ export default function App() {
           </div>
           <div className="dashboard-action-grid">
             {dashboardActions.map(({ role: targetRole, title, text, icon: Icon }) => (
-              <button className="dashboard-action" type="button" key={targetRole} onClick={() => switchRole(targetRole)}>
+              <button className="dashboard-action" type="button" key={targetRole} onClick={() => openRoleWorkspace(targetRole)}>
                 <IconFrame icon={Icon} tone={targetRole === "admin" ? "amber" : targetRole === "service" ? "teal" : targetRole === "property" ? "blue" : "green"} />
                 <span className="dashboard-action-title">{title}</span>
                 <p>{text}</p>
@@ -1487,7 +1594,7 @@ export default function App() {
           <div className="panel listing-panel">
             <div className="panel-head"><h3>Verified Matches</h3><Pill tone="neutral">Page {meta.page || 1}/{meta.totalPages || 1}</Pill></div>
             {listings.length ? listings.map((listing) => (
-              <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} />
+              <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} canEngage={role === "business"} />
             )) : <Empty title="No matches" />}
             {Number(meta.totalPages || 1) > 1 ? (
               <div className="pagination-controls" aria-label="Listing pages">
@@ -1594,7 +1701,7 @@ export default function App() {
                   canManage={user?.verificationStatus === "verified"}
                 />
               ) : (
-                <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} />
+                <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} canEngage={role === "business"} />
               )
             )) : <Empty title="No listings yet" />}
           </div>
@@ -1623,11 +1730,13 @@ export default function App() {
                     <p>{booking.requestType} - {shortDate(booking.proposedAt)}</p>
                     <span>{booking.requester?.name} to {booking.receiver?.name}</span>
                   </div>
-                  <div className="row-actions">
-                    <button type="button" className="icon-button" title="Accept" onClick={() => respondBooking(booking._id, "accepted")}><CheckCircle2 size={16} /></button>
-                    <button type="button" className="icon-button" title="Complete" onClick={() => respondBooking(booking._id, "completed")}><ClipboardCheck size={16} /></button>
-                    <button type="button" className="icon-button danger" title="Decline" onClick={() => respondBooking(booking._id, "declined")}><XCircle size={16} /></button>
-                  </div>
+                  {role !== "business" ? (
+                    <div className="row-actions">
+                      <button type="button" className="icon-button" title="Accept" onClick={() => respondBooking(booking._id, "accepted")}><CheckCircle2 size={16} /></button>
+                      <button type="button" className="icon-button" title="Complete" onClick={() => respondBooking(booking._id, "completed")}><ClipboardCheck size={16} /></button>
+                      <button type="button" className="icon-button danger" title="Decline" onClick={() => respondBooking(booking._id, "declined")}><XCircle size={16} /></button>
+                    </div>
+                  ) : null}
                 </article>
               )) : <Empty title="No records" />}
             </div>
@@ -1716,7 +1825,9 @@ export default function App() {
                     <p>{listing.owner?.role || listing.listingType} - {listing.owner?.verificationStatus || "verified"}</p>
                     <ProviderRatingLine profile={listing.owner} />
                   </div>
-                  <button type="button" className="action primary small" onClick={() => startConversation(listing._id)}><MessageSquareText size={15} />Message</button>
+                  {role === "business" ? (
+                    <button type="button" className="action primary small" onClick={() => startConversation(listing._id)}><MessageSquareText size={15} />Message</button>
+                  ) : null}
                 </div>
               </>
             ) : <Empty title="No listing selected" />}
@@ -1749,7 +1860,7 @@ export default function App() {
           <div className="panel">
             <div className="panel-head"><h3>Setup Suggestions</h3><Pill tone="neutral">{detail?.setupSuggestions?.length || 0}</Pill></div>
             {(detail?.setupSuggestions || []).map((item) => (
-              <ListingRow key={item._id} listing={item} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} />
+              <ListingRow key={item._id} listing={item} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} canEngage={role === "business"} />
             ))}
           </div>
           <div className="panel">
@@ -1845,10 +1956,12 @@ export default function App() {
             <label>Service need<input name="serviceNeed" defaultValue={user?.serviceNeed || ""} /></label>
             <button className="action primary" type="submit"><Bookmark size={16} />Save Profile</button>
           </form>
-          <div className="panel listing-panel">
-            <div className="panel-head"><h3>Favorites</h3><Pill tone="neutral">{favorites.length}</Pill></div>
-            {favorites.map((item) => <ListingRow key={item._id} listing={item} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} />)}
-          </div>
+          {role === "business" ? (
+            <div className="panel listing-panel">
+              <div className="panel-head"><h3>Favorites</h3><Pill tone="neutral">{favorites.length}</Pill></div>
+              {favorites.map((item) => <ListingRow key={item._id} listing={item} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} canEngage />)}
+            </div>
+          ) : null}
         </section>
       </>
     );
@@ -2020,6 +2133,19 @@ export default function App() {
     admin: renderAdmin
   };
 
+  if (!authReady) {
+    return (
+      <main className="auth-loading" aria-live="polite">
+        <Building2 size={30} />
+        <strong>Restoring secure session...</strong>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage busy={busy} error={authError} onClearError={() => setAuthError("")} onLogin={login} onRegister={register} />;
+  }
+
   return (
     <>
       <header className="app-topbar">
@@ -2027,20 +2153,9 @@ export default function App() {
           <span className="brand-mark"><Building2 size={23} /></span>
           <div><h1>OfficeKhoj BD</h1><p>Commercial space operations</p></div>
         </div>
-        <div className="role-switcher">
-          {roles.map(({ key, label, icon: Icon }) => (
-            <button
-              type="button"
-              className={`${role === key ? "active" : ""} ${switchingRole === key ? "loading" : ""}`}
-              key={key}
-              onClick={() => switchRole(key)}
-              disabled={Boolean(switchingRole)}
-              aria-pressed={role === key}
-              title={`Switch to ${label} account`}
-            >
-              <Icon size={15} />{label}{switchingRole === key && <span className="role-spinner" />}
-            </button>
-          ))}
+        <div className="role-switcher auth-session-actions">
+          <span className="current-role-pill"><CurrentRoleIcon size={15} />{currentRole.label}</span>
+          <button type="button" onClick={logout} title="Sign out of OfficeKhoj BD"><LogOut size={15} />Logout</button>
         </div>
         <div className="account-chip">
           <span className={health?.ok ? "live-dot" : "live-dot muted"} />
@@ -2055,7 +2170,7 @@ export default function App() {
       <main className="app-shell">
         <aside className="sidebar">
           <span className="sidebar-label">Menu</span>
-          {navItems.map(({ key, label, icon: Icon }) => {
+          {navItems.filter(({ key }) => canAccessView(role, key)).map(({ key, label, icon: Icon }) => {
             const badge = key === "notifications"
               ? notifications.filter((item) => !item.read).length
               : key === "messages"
@@ -2075,7 +2190,7 @@ export default function App() {
         </aside>
 
         <section className="content">
-          {dashboard && operations ? views[view]() : <div className="loading-panel"><Database size={24} /><strong>Loading workspace</strong></div>}
+          {dashboard && operations ? (views[view] || views[roleLandingViews[role]])() : <div className="loading-panel"><Database size={24} /><strong>Loading workspace</strong></div>}
         </section>
       </main>
 

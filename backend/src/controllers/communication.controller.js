@@ -12,10 +12,6 @@ function isConversationParticipant(conversation, userId) {
   return conversation.participants.some((id) => String(id) === String(userId));
 }
 
-function isBookingParticipant(booking, userId) {
-  return [booking.requester, booking.receiver].some((id) => String(id) === String(userId));
-}
-
 export async function getConversations(req, res, next) {
   try {
     const conversations = await Conversation.find({ participants: req.params.userId })
@@ -199,8 +195,8 @@ export async function respondToBooking(req, res, next) {
   try {
     const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ error: "Booking not found." });
-    if (req.user.role !== "admin" && !isBookingParticipant(booking, req.user._id)) {
-      return res.status(403).json({ error: "You can only respond to your own bookings." });
+    if (req.user.role !== "admin" && String(booking.receiver) !== String(req.user._id)) {
+      return res.status(403).json({ error: "Only the listing owner or an admin can respond to this booking." });
     }
     booking.status = req.body.status || "accepted";
     if (req.body.alternateAt) booking.alternateAt = req.body.alternateAt;
