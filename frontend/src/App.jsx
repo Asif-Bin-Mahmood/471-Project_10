@@ -74,20 +74,24 @@ const navItems = [
   { key: "admin", label: "Admin", icon: ShieldCheck }
 ];
 
+// Member 1 - Module 1 & 2: marketplace search/filter defaults.
 const initialSearchQuery = {
   area: "Banani",
   type: "all",
-  category: "all",
+  propertyType: "all",
+  serviceCategory: "all",
   sort: "distance",
   minPrice: 0,
   maxPrice: 150000,
   minSize: 0,
+  maxSize: 0,
   page: 1,
   pageSize: 8
 };
 
 const CUSTOMER_SERVICE_PHONE = "+8801636317693";
-const categoryValues = ["Office", "Shop", "Interior", "ISP", "Electrician"];
+const propertyTypeValues = ["Office", "Shop"];
+const serviceCategoryValues = ["Interior Design", "ISP", "Electrician", "Vendor"];
 
 function normalizePreferenceNumber(value, fallback = 0) {
   const number = Number(value);
@@ -152,17 +156,19 @@ const categoryPhotoAssets = {
   isp: photoAssets["isp-rack.jpg"],
   office: photoAssets["office-floor.jpg"],
   electrician: photoAssets["electric-team.jpg"],
+  vendor: photoAssets["uploaded-photo.jpg"],
   property: photoAssets["office-floor.jpg"],
   service: photoAssets["portfolio-1.jpg"]
 };
 
 const categoryOptions = [
-  { value: "all", label: "All", type: "all", photo: photoAssets["uploaded-photo.jpg"] },
-  { value: "Office", label: "Office", type: "property", photo: photoAssets["office-floor.jpg"] },
-  { value: "Shop", label: "Shop", type: "property", photo: photoAssets["retail-front.jpg"] },
-  { value: "Interior", label: "Interior", type: "service", photo: photoAssets["portfolio-1.jpg"] },
-  { value: "ISP", label: "ISP", type: "service", photo: photoAssets["isp-rack.jpg"] },
-  { value: "Electrician", label: "Electrician", type: "service", photo: photoAssets["electric-team.jpg"] }
+  { value: "all", label: "All", type: "all", propertyType: "all", serviceCategory: "all", photo: photoAssets["uploaded-photo.jpg"] },
+  { value: "Office", label: "Office", type: "property", propertyType: "Office", serviceCategory: "all", photo: photoAssets["office-floor.jpg"] },
+  { value: "Shop", label: "Shop", type: "property", propertyType: "Shop", serviceCategory: "all", photo: photoAssets["retail-front.jpg"] },
+  { value: "Interior Design", label: "Interior Design", type: "service", propertyType: "all", serviceCategory: "Interior Design", photo: photoAssets["portfolio-1.jpg"] },
+  { value: "ISP", label: "ISP", type: "service", propertyType: "all", serviceCategory: "ISP", photo: photoAssets["isp-rack.jpg"] },
+  { value: "Electrician", label: "Electrician", type: "service", propertyType: "all", serviceCategory: "Electrician", photo: photoAssets["electric-team.jpg"] },
+  { value: "Vendor", label: "Vendor", type: "service", propertyType: "all", serviceCategory: "Vendor", photo: photoAssets["uploaded-photo.jpg"] }
 ];
 
 const managementProfiles = {
@@ -202,8 +208,8 @@ const managementProfiles = {
     inventoryTitle: "My Service Packages",
     createTitle: "Create Service Package",
     defaultTitle: "Complete Office Setup Package",
-    defaultCategory: "Interior",
-    categories: ["Interior", "ISP", "Electrician"],
+    defaultCategory: "Interior Design",
+    categories: ["Interior Design", "ISP", "Electrician", "Vendor"],
     defaultPrice: "45000",
     defaultSize: "0",
     defaultFacilities: "Planning, Installation, Support, Maintenance",
@@ -231,6 +237,13 @@ const dashboardActions = [
 
 function money(value) {
   return `BDT ${Number(value || 0).toLocaleString("en-BD")}`;
+}
+
+function commaList(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function number(value) {
@@ -454,18 +467,85 @@ function ListingRow({ listing, onOpen, onSave, onBook, onMessage }) {
         </div>
         <p>{listing.category} in {listing.area} - {money(listing.price)}</p>
         <div className="micro-row">
-          <span><MapPin size={13} />{listing.metricLabel}</span>
+          <span><MapPin size={13} />{listing.searchDistanceLabel || listing.metricLabel}</span>
           <span><Star size={13} />{Number(listing.rating || 0).toFixed(1)}</span>
           <span><Database size={13} />{listing.listingType}</span>
         </div>
       </div>
       <div className="row-actions">
-        <button type="button" className="icon-button" title="Save" onClick={() => onSave(listing._id)}><Heart size={16} /></button>
+        <button type="button" className="icon-button" title="Save / remove favorite" onClick={() => onSave(listing._id)}><Heart size={16} /></button>
         <button type="button" className="icon-button" title="Message" onClick={() => onMessage(listing._id)}><Mail size={16} /></button>
         <button type="button" className="action primary small" onClick={() => onBook(listing._id)}><CalendarCheck size={15} />Book</button>
         <button type="button" className="action secondary small" onClick={() => onOpen(listing._id)}>Open<ChevronRight size={15} /></button>
       </div>
     </article>
+  );
+}
+
+// Member 2 - Module 1 & 2: one editor is reused for property and service listings.
+function ListingEditForm({ listing, busy, onCancel, onSave }) {
+  const [selectedAddress, setSelectedAddress] = useState(null);
+  const categories = listing.listingType === "service" ? serviceCategoryValues : propertyTypeValues;
+  const statuses = listing.listingType === "service" ? ["Available", "Busy"] : ["Available", "Leased"];
+
+  async function submit(event) {
+    event.preventDefault();
+    const form = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const payload = {
+      title: form.title,
+      category: form.category,
+      price: Number(form.price),
+      size: listing.listingType === "property" ? Number(form.size) : 0,
+      facilities: commaList(form.facilities),
+      coverageAreas: commaList(form.coverageAreas),
+      photos: commaList(form.photos),
+      description: form.description,
+      status: form.status
+    };
+    if (selectedAddress?.id) payload.addressId = selectedAddress.id;
+    await onSave(listing._id, payload);
+  }
+
+  return (
+    <form className="listing-edit-form" onSubmit={submit}>
+      <div className="listing-edit-head">
+        <div>
+          <span className="eyebrow">Full listing editor</span>
+          <strong>Edit {listing.listingType === "service" ? "service package" : "commercial space"}</strong>
+        </div>
+        <button className="icon-button" type="button" title="Close editor" onClick={onCancel}><XCircle size={16} /></button>
+      </div>
+      <div className="field-row">
+        <label>Title<input name="title" defaultValue={listing.title} minLength="4" required /></label>
+        <label>Category<select name="category" defaultValue={listing.category}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
+      </div>
+      <div className="field-row">
+        <label>{listing.listingType === "service" ? "Starting price" : "Monthly rent"}<input name="price" type="number" min="1" defaultValue={listing.price} required /></label>
+        {listing.listingType === "property" ? (
+          <label>Size (sq ft)<input name="size" type="number" min="1" defaultValue={listing.size} required /></label>
+        ) : (
+          <label>Status<select name="status" defaultValue={listing.status}>{statuses.map((status) => <option key={status}>{status}</option>)}</select></label>
+        )}
+      </div>
+      {listing.listingType === "property" ? (
+        <label>Status<select name="status" defaultValue={listing.status}>{statuses.map((status) => <option key={status}>{status}</option>)}</select></label>
+      ) : null}
+      <label>{listing.listingType === "service" ? "Service features" : "Facilities"}<input name="facilities" defaultValue={(listing.facilities || []).join(", ")} /></label>
+      <label>Coverage areas{listing.listingType === "property" ? " (optional)" : ""}<input name="coverageAreas" defaultValue={(listing.coverageAreas || []).join(", ")} required={listing.listingType === "service"} /></label>
+      <label>Photos<input name="photos" defaultValue={(listing.photos || []).join(", ")} /></label>
+      <label>{listing.listingType === "service" ? "Portfolio / service description" : "Description"}<textarea name="description" defaultValue={listing.description || ""} /></label>
+      <AddressAutocomplete
+        idPrefix={`full-edit-address-${listing._id}`}
+        label="Change address/location (optional)"
+        initialLabel={listing.address}
+        onSelect={setSelectedAddress}
+      />
+      <p className="editor-help">Keep the current address text unchanged to preserve the existing coordinates, or select a suggestion to update them.</p>
+      <div className="listing-edit-actions">
+        <button className="action secondary" type="button" onClick={onCancel}>Cancel</button>
+        <button className="action primary" type="submit" disabled={busy}><Settings size={16} />Save all changes</button>
+      </div>
+    </form>
   );
 }
 
@@ -481,7 +561,12 @@ function ManagementListingRow({
   onEditAddress,
   onCancelAddress,
   onAddressSelect,
-  onAddressSubmit
+  onAddressSubmit,
+  editing,
+  onEdit,
+  onCancelEdit,
+  onSaveEdit,
+  canManage = true
 }) {
   const alternateStatus = listing.listingType === "service" ? "Busy" : "Leased";
   const isEditingAddress = addressEditor?.listingId === listing._id;
@@ -504,14 +589,16 @@ function ManagementListingRow({
         </div>
       </div>
       <form className="management-actions" onSubmit={(event) => onPrice(event, listing._id)}>
-        <input name="price" type="number" min="1" defaultValue={listing.price} aria-label={`Price for ${listing.title}`} />
-        <button className="action secondary small" type="submit"><Settings size={15} />Save</button>
-        <button className="action secondary small" type="button" onClick={() => onStatus(listing._id, "Available")}>Available</button>
-        <button className="action secondary small" type="button" onClick={() => onStatus(listing._id, alternateStatus)}>{alternateStatus}</button>
-        <button className="action secondary small" type="button" onClick={() => onEditAddress(listing)}>Change address</button>
-        <button className="icon-button danger" type="button" title="Delete listing" onClick={() => onDelete(listing._id)}><XCircle size={16} /></button>
+        <input name="price" type="number" min="1" defaultValue={listing.price} aria-label={`Price for ${listing.title}`} disabled={!canManage} />
+        <button className="action secondary small" type="submit" disabled={!canManage}><Settings size={15} />Save</button>
+        <button className="action secondary small" type="button" disabled={!canManage} onClick={() => onStatus(listing._id, "Available")}>Available</button>
+        <button className="action secondary small" type="button" disabled={!canManage} onClick={() => onStatus(listing._id, alternateStatus)}>{alternateStatus}</button>
+        <button className="action secondary small" type="button" disabled={!canManage} onClick={() => onEdit(listing._id)}>Edit details</button>
+        <button className="action secondary small" type="button" disabled={!canManage} onClick={() => onEditAddress(listing)}>Change address</button>
+        <button className="icon-button danger" type="button" title="Delete listing" disabled={!canManage} onClick={() => onDelete(listing._id)}><XCircle size={16} /></button>
       </form>
-      {isEditingAddress && (
+      {!canManage ? <p className="editor-help">Admin verification is required before this listing can be managed.</p> : null}
+      {canManage && isEditingAddress && (
         <form className="management-address-editor" onSubmit={(event) => onAddressSubmit(event, listing)}>
           <div className="management-address-head">
             <strong>Change address</strong>
@@ -531,6 +618,9 @@ function ManagementListingRow({
           </button>
         </form>
       )}
+      {canManage && editing ? (
+        <ListingEditForm listing={listing} busy={busy} onCancel={onCancelEdit} onSave={onSaveEdit} />
+      ) : null}
     </article>
   );
 }
@@ -565,6 +655,7 @@ export default function App() {
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [createAddressResetKey, setCreateAddressResetKey] = useState(0);
   const [addressEditor, setAddressEditor] = useState({ listingId: "", selectedAddress: null, resetKey: 0 });
+  const [editingListingId, setEditingListingId] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
@@ -679,18 +770,26 @@ export default function App() {
 
   async function loadRoleInventory(activeUser = user, activeRole = role) {
     const profile = managementProfiles[activeRole] || managementProfiles.business;
+    if (profile.canCreate && activeUser?._id) {
+      const data = await api(`/listings/mine?type=${encodeURIComponent(profile.listingType)}`);
+      setInventoryListings(data.results || []);
+      setInventoryMeta(data);
+      return;
+    }
+
     const params = new URLSearchParams({
       area: "",
       type: profile.listingType,
-      category: "all",
+      propertyType: "all",
+      serviceCategory: "all",
       sort: "newest",
       maxPrice: String(Number.MAX_SAFE_INTEGER),
       minSize: "0",
+      maxSize: "0",
       page: "1",
       pageSize: "12",
-      includeUnavailable: "true"
+      includeUnavailable: activeRole === "admin" ? "true" : "false"
     });
-    if (profile.canCreate && activeUser?._id) params.set("ownerId", activeUser._id);
     const data = await api(`/listings?${params.toString()}`);
     setInventoryListings(data.results || []);
     setInventoryMeta(data);
@@ -899,6 +998,7 @@ export default function App() {
     setNotificationResults(null);
     resetAddressSearch();
     cancelListingAddressEdit();
+    setEditingListingId("");
     resetReviewForm();
     try {
       await runAction(async () => {
@@ -913,17 +1013,24 @@ export default function App() {
     }
   }
 
+  // Member 1 - Module 1 & 2: send the current location/filter values to the unified search API.
   async function submitSearch(event) {
     event.preventDefault();
     await applySearch({ ...query, ...searchDraft });
   }
 
   async function selectCategoryOption(option) {
-    const nextQuery = { ...searchDraft, category: option.value, type: option.type };
+    const nextQuery = {
+      ...searchDraft,
+      type: option.type,
+      propertyType: option.propertyType,
+      serviceCategory: option.serviceCategory
+    };
     setSearchDraft(nextQuery);
     await applySearch({ ...query, ...nextQuery });
   }
 
+  // Member 2 - Module 1 & 2: create either a property or service listing through the same API.
   async function createListing(event) {
     event.preventDefault();
     if (!selectedAddress) {
@@ -937,9 +1044,9 @@ export default function App() {
     form.address = selectedAddress.label;
     form.area = selectedAddress.area;
     form.location = { lat: selectedAddress.lat, lng: selectedAddress.lng };
-    form.facilities = form.facilities.split(",").map((item) => item.trim()).filter(Boolean);
-    form.coverageAreas = form.coverageAreas.split(",").map((item) => item.trim()).filter(Boolean);
-    form.photos = (form.photos || "uploaded-photo.jpg").split(",").map((item) => item.trim()).filter(Boolean);
+    form.facilities = commaList(form.facilities);
+    form.coverageAreas = commaList(form.coverageAreas);
+    form.photos = commaList(form.photos || "uploaded-photo.jpg");
     await runAction(async () => {
       await api("/listings", { method: "POST", body: JSON.stringify(form) });
       await loadCore(user, query, { activeRole: role });
@@ -948,6 +1055,7 @@ export default function App() {
     }, "Listing saved");
   }
 
+  // Member 2 - Module 3: property = Available/Leased, service = Available/Busy.
   async function updateListingStatus(id, status) {
     await runAction(async () => {
       const data = await api(`/listings/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) });
@@ -964,6 +1072,20 @@ export default function App() {
       setInventoryListings((current) => current.map((item) => (item._id === id ? data.listing : item)));
       setListings((current) => current.map((item) => (item._id === id ? data.listing : item)));
     }, "Price updated");
+  }
+
+  async function updateListingDetails(id, payload) {
+    await runAction(async () => {
+      const data = await api(`/listings/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+      setInventoryListings((current) => current.map((item) => (item._id === id ? data.listing : item)));
+      setListings((current) => current.map((item) => (item._id === id ? data.listing : item)));
+      setDetail((current) => (
+        current?.listing?._id === id
+          ? { ...current, listing: { ...current.listing, ...data.listing } }
+          : current
+      ));
+      setEditingListingId("");
+    }, "Listing details updated");
   }
 
   function editListingAddress(listing) {
@@ -1015,11 +1137,13 @@ export default function App() {
     }, "Listing deleted");
   }
 
+  // Member 1 - Module 3: the same button adds or removes a favorite.
   async function saveFavorite(id) {
+    const alreadySaved = favorites.some((item) => item._id === id);
     await runAction(async () => {
-      await api(`/favorites/${user._id}/${id}`, { method: "POST" });
+      await api(`/favorites/${user._id}/${id}`, { method: alreadySaved ? "DELETE" : "POST" });
       await loadCore(user);
-    }, "Saved to favorites");
+    }, alreadySaved ? "Removed from favorites" : "Saved to favorites");
   }
 
   async function createBooking(id) {
@@ -1293,25 +1417,43 @@ export default function App() {
     return (
       <>
         <PageHeader eyebrow="Marketplace" title="Commercial Spaces and Setup Services" meta={<Pill tone="neutral">{meta.total || 0} matches</Pill>} />
-        <form className="filter-bar" onSubmit={submitSearch}>
-          <label>Area<input name="area" value={searchDraft.area} onChange={(event) => updateSearchDraft("area", event.target.value)} /></label>
-          <label>Type<select name="type" value={searchDraft.type} onChange={(event) => updateSearchDraft("type", event.target.value)}><option value="all">All</option><option value="property">Property</option><option value="service">Service</option></select></label>
-          <label>Category<select name="category" value={searchDraft.category} onChange={(event) => updateSearchDraft("category", event.target.value)}><option value="all">All</option>{categoryValues.map((category) => <option key={category}>{category}</option>)}</select></label>
+        {/* Member 1 - Module 1 & 2: location + type/category + price/size filters. */}
+        <form className="filter-bar member-search-filter" onSubmit={submitSearch}>
+          <label className="area-filter">Area / location<input name="area" placeholder="e.g. Banani, Dhaka" value={searchDraft.area} onChange={(event) => updateSearchDraft("area", event.target.value)} /></label>
+          <label>Result type<select name="type" value={searchDraft.type} onChange={(event) => updateSearchDraft("type", event.target.value)}><option value="all">Spaces + services</option><option value="property">Commercial spaces</option><option value="service">Setup services</option></select></label>
+          <label>Space type<select name="propertyType" value={searchDraft.propertyType} onChange={(event) => updateSearchDraft("propertyType", event.target.value)}><option value="all">All spaces</option>{propertyTypeValues.map((category) => <option key={category}>{category}</option>)}</select></label>
+          <label>Service category<select name="serviceCategory" value={searchDraft.serviceCategory} onChange={(event) => updateSearchDraft("serviceCategory", event.target.value)}><option value="all">All services</option>{serviceCategoryValues.map((category) => <option key={category}>{category}</option>)}</select></label>
           <label>Min price<input name="minPrice" type="number" min="0" value={searchDraft.minPrice} onChange={(event) => updateSearchDraft("minPrice", event.target.value)} /></label>
           <label>Max price<input name="maxPrice" type="number" min="0" value={searchDraft.maxPrice} onChange={(event) => updateSearchDraft("maxPrice", event.target.value)} /></label>
-          <label>Min size<input name="minSize" type="number" min="0" value={searchDraft.minSize} onChange={(event) => updateSearchDraft("minSize", event.target.value)} /></label>
-          <label>Sort<select name="sort" value={searchDraft.sort} onChange={(event) => updateSearchDraft("sort", event.target.value)}><option value="distance">Distance</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option><option value="rating">Rating</option><option value="newest">Newest</option></select></label>
-          <button className="action primary" type="submit"><SlidersHorizontal size={16} />Apply</button>
+          <label>Min size (sq ft)<input name="minSize" type="number" min="0" value={searchDraft.minSize} onChange={(event) => updateSearchDraft("minSize", event.target.value)} /></label>
+          <label>Max size (sq ft)<input name="maxSize" type="number" min="0" value={searchDraft.maxSize} onChange={(event) => updateSearchDraft("maxSize", event.target.value)} /></label>
+          <label>Sort<select name="sort" value={searchDraft.sort} onChange={(event) => updateSearchDraft("sort", event.target.value)}><option value="distance">Distance from area</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option><option value="rating">Rating</option><option value="newest">Newest</option></select></label>
+          <button className="action primary" type="submit"><SlidersHorizontal size={16} />Search & Apply</button>
           {hasSavedSearchPreferences(user) ? (
             <button className="action secondary" type="button" onClick={applySavedPreferences}><Bookmark size={16} />Use Saved Preferences</button>
           ) : null}
           <button className="action secondary" type="button" onClick={() => applySearch(initialSearchQuery)}>Reset</button>
         </form>
+        {meta.searchLocation ? (
+          <div className="geocode-status" aria-live="polite">
+            <MapPin size={17} />
+            <div>
+              <strong>{meta.searchLocation.area || searchDraft.area}</strong>
+              <span>{meta.searchLocation.displayName}</span>
+            </div>
+            <Pill tone={meta.searchLocation.source === "nominatim" ? "success" : "warning"}>{meta.searchLocation.source === "nominatim" ? "Nominatim resolved" : "Demo fallback"}</Pill>
+          </div>
+        ) : null}
+        {meta.geocodeWarning ? <p className="geocode-warning">{meta.geocodeWarning}</p> : null}
         <div className="photo-option-grid">
           {categoryOptions.map((option) => (
             <button
               type="button"
-              className={`photo-option ${searchDraft.category === option.value ? "active" : ""}`}
+              className={`photo-option ${
+                option.value === "all"
+                  ? (searchDraft.type === "all" && searchDraft.propertyType === "all" && searchDraft.serviceCategory === "all" ? "active" : "")
+                  : (searchDraft.type === option.type && searchDraft.propertyType === option.propertyType && searchDraft.serviceCategory === option.serviceCategory ? "active" : "")
+              }`}
               key={option.value}
               onClick={() => selectCategoryOption(option)}
             >
@@ -1338,8 +1480,9 @@ export default function App() {
 
         <section className="market-grid">
           <div className="panel">
-            <div className="panel-head"><h3>Dhaka Map</h3><Pill tone="neutral">Location metric</Pill></div>
-            <ListingMap listings={listings} />
+            <div className="panel-head"><h3>{meta.searchLocation?.area ? `${meta.searchLocation.area} Map` : "Unified Map"}</h3><Pill tone="neutral">Properties + services</Pill></div>
+            {/* Same map shows P = property, S = service and the searched-area circle. */}
+            <ListingMap listings={listings} searchLocation={meta.searchLocation} />
           </div>
           <div className="panel listing-panel">
             <div className="panel-head"><h3>Verified Matches</h3><Pill tone="neutral">Page {meta.page || 1}/{meta.totalPages || 1}</Pill></div>
@@ -1380,36 +1523,42 @@ export default function App() {
         <PageHeader eyebrow={profile.eyebrow} title={profile.title} meta={<Pill tone="neutral">{inventoryMeta.total || inventory.length} records</Pill>} />
         <section className="split-layout">
           {profile.canCreate ? (
-            <form className="panel form-panel" onSubmit={createListing}>
-              <div className="panel-head"><h3>{profile.createTitle}</h3><Pill tone="neutral">{profile.badge}</Pill></div>
-              <input type="hidden" name="listingType" defaultValue={profile.listingType} />
-              <AddressAutocomplete
-                idPrefix="create-listing-address"
-                label="Address search"
-                resetSignal={createAddressResetKey}
-                onSelect={setSelectedAddress}
-                required
-              />
-              <input type="hidden" name="addressId" value={selectedAddress?.id || ""} readOnly />
-              <input type="hidden" name="area" value={selectedAddress?.area || ""} readOnly />
-              <input type="hidden" name="lat" value={selectedAddress?.lat ?? ""} readOnly />
-              <input type="hidden" name="lng" value={selectedAddress?.lng ?? ""} readOnly />
-              <label>Title<input name="title" defaultValue={profile.defaultTitle} /></label>
-              <div className="field-row">
-                <label>Category<select name="category" defaultValue={profile.defaultCategory}>{profile.categories.map((category) => <option key={category}>{category}</option>)}</select></label>
-                <label>{profile.listingType === "service" ? "Starting price" : "Monthly rent"}<input name="price" type="number" defaultValue={profile.defaultPrice} /></label>
+            user?.verificationStatus === "verified" ? (
+              <form className="panel form-panel" onSubmit={createListing}>
+                <div className="panel-head"><h3>{profile.createTitle}</h3><Pill tone="success">Verified account</Pill></div>
+                <input type="hidden" name="listingType" defaultValue={profile.listingType} />
+                <AddressAutocomplete
+                  idPrefix="create-listing-address"
+                  label="Address / location"
+                  resetSignal={createAddressResetKey}
+                  onSelect={setSelectedAddress}
+                  required
+                />
+                <input type="hidden" name="addressId" value={selectedAddress?.id || ""} readOnly />
+                <label>Title<input name="title" defaultValue={profile.defaultTitle} minLength="4" required /></label>
+                <div className="field-row">
+                  <label>{profile.listingType === "service" ? "Service category" : "Space type"}<select name="category" defaultValue={profile.defaultCategory}>{profile.categories.map((category) => <option key={category}>{category}</option>)}</select></label>
+                  <label>{profile.listingType === "service" ? "Starting price" : "Monthly rent"}<input name="price" type="number" min="1" defaultValue={profile.defaultPrice} required /></label>
+                </div>
+                {profile.listingType === "property" ? (
+                  <label>Size (sq ft)<input name="size" type="number" min="1" defaultValue={profile.defaultSize} required /></label>
+                ) : (
+                  <input name="size" type="hidden" defaultValue="0" />
+                )}
+                <label>{profile.listingType === "service" ? "Service features" : "Facilities"}<input name="facilities" defaultValue={profile.defaultFacilities} /></label>
+                <label>Coverage areas{profile.listingType === "property" ? " (optional)" : ""}<input name="coverageAreas" defaultValue={profile.defaultCoverage} required={profile.listingType === "service"} /></label>
+                <label>Photos<input name="photos" defaultValue={profile.defaultPhotos} /></label>
+                <label>{profile.listingType === "service" ? "Portfolio / service description" : "Description"}<textarea name="description" defaultValue={profile.defaultDescription} /></label>
+                <button className="action primary" type="submit" disabled={busy}><ListPlus size={16} />Save {profile.listingType === "service" ? "Service" : "Property"}</button>
+              </form>
+            ) : (
+              <div className="panel role-workflow-panel verification-gate">
+                <IconFrame icon={ShieldCheck} tone="amber" />
+                <h3>Verification required</h3>
+                <p>Your {role === "property" ? "property owner" : "service provider"} account must be verified by an admin before you can create, edit, or delete listings.</p>
+                <Pill tone="warning">Current status: {user?.verificationStatus || "pending"}</Pill>
               </div>
-              {profile.listingType === "property" ? (
-                <label>Size<input name="size" type="number" defaultValue={profile.defaultSize} /></label>
-              ) : (
-                <input name="size" type="hidden" defaultValue="0" />
-              )}
-              <label>{profile.listingType === "service" ? "Service features" : "Facilities"}<input name="facilities" defaultValue={profile.defaultFacilities} /></label>
-              <label>Coverage areas<input name="coverageAreas" defaultValue={profile.defaultCoverage} /></label>
-              <label>Photos<input name="photos" defaultValue={profile.defaultPhotos} /></label>
-              <label>Description<textarea name="description" defaultValue={profile.defaultDescription} /></label>
-              <button className="action primary" type="submit"><ListPlus size={16} />Save {profile.listingType === "service" ? "Service" : "Property"}</button>
-            </form>
+            )
           ) : (
             <div className="panel role-workflow-panel">
               <IconFrame icon={role === "admin" ? ShieldCheck : BriefcaseBusiness} tone={role === "admin" ? "amber" : "green"} />
@@ -1438,6 +1587,11 @@ export default function App() {
                   onCancelAddress={cancelListingAddressEdit}
                   onAddressSelect={selectListingAddress}
                   onAddressSubmit={updateListingAddress}
+                  editing={editingListingId === listing._id}
+                  onEdit={(id) => setEditingListingId((current) => current === id ? "" : id)}
+                  onCancelEdit={() => setEditingListingId("")}
+                  onSaveEdit={updateListingDetails}
+                  canManage={user?.verificationStatus === "verified"}
                 />
               ) : (
                 <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} />
@@ -1550,6 +1704,11 @@ export default function App() {
                   <MetricCard icon={MapPin} tone="blue" label="Distance" value={listing.metricLabel} />
                   <MetricCard icon={Store} tone="teal" label="Facilities" value={asList(listing.facilities)} />
                 </div>
+                <div className="detail-location-map">
+                  <div className="panel-head"><h3>Listing Location</h3><Pill tone="neutral">OpenStreetMap</Pill></div>
+                  {/* Member 1 - Module 3: reuse the same Leaflet map for a single listing. */}
+                  <ListingMap listings={[listing]} />
+                </div>
                 <div className="owner-line">
                   <IconFrame icon={UserRound} tone="blue" />
                   <div>
@@ -1563,14 +1722,28 @@ export default function App() {
             ) : <Empty title="No listing selected" />}
           </div>
           <div className="panel">
-            <div className="panel-head"><h3>Nearby Places</h3><Pill tone="neutral">Area data</Pill></div>
+            <div className="panel-head">
+              {/* Member 2 - Module 3: live Foursquare data, with demo fallback from the backend. */}
+              <h3>Nearby Places</h3>
+              <Pill tone={detail?.nearbySource === "foursquare" ? "success" : "warning"}>
+                {detail?.nearbySource === "foursquare" ? "Foursquare Places" : "Demo fallback"}
+              </Pill>
+            </div>
+            {detail?.nearbyWarning ? <p className="nearby-warning">{detail.nearbyWarning}</p> : null}
             <div className="compact-list">
               {(detail?.nearbyPlaces || []).map((place) => (
                 <div className="simple-row" key={place.id}>
                   <IconFrame icon={MapPin} tone="green" />
-                  <div><strong>{place.category}</strong><p>{place.name} - {place.walkingMinutes} min walk</p></div>
+                  <div>
+                    <strong>{place.category}: {place.name}</strong>
+                    <p>
+                      {place.walkingMinutes ? `${place.walkingMinutes} min walk` : place.distanceKm !== null && place.distanceKm !== undefined ? `${place.distanceKm} km away` : "Nearby"}
+                      {place.address ? ` - ${place.address}` : ""}
+                    </p>
+                  </div>
                 </div>
               ))}
+              {!(detail?.nearbyPlaces || []).length ? <Empty title="No nearby places found" /> : null}
             </div>
           </div>
           <div className="panel">

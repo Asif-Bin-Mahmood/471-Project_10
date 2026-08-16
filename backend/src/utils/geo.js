@@ -1,22 +1,33 @@
 import { landmarkData, nearbySeed } from "../seed/seedSource.js";
 
-function haversineKm(aLat, aLng, bLat, bLng) {
-  const radiusKm = 6371;
-  const toRad = (degree) => (degree * Math.PI) / 180;
-  const dLat = toRad(bLat - aLat);
-  const dLng = toRad(bLng - aLng);
-  const lat1 = toRad(aLat);
-  const lat2 = toRad(bLat);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * radiusKm * Math.asin(Math.sqrt(h));
+// Calculate straight-line distance between two latitude/longitude points.
+// This is the Haversine formula and returns distance in kilometres.
+export function haversineKm(aLat, aLng, bLat, bLng) {
+  const earthRadiusKm = 6371;
+  const toRadians = (degree) => (degree * Math.PI) / 180;
+
+  const latDifference = toRadians(bLat - aLat);
+  const lngDifference = toRadians(bLng - aLng);
+  const lat1 = toRadians(aLat);
+  const lat2 = toRadians(bLat);
+
+  const haversine =
+    Math.sin(latDifference / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(lngDifference / 2) ** 2;
+
+  return 2 * earthRadiusKm * Math.asin(Math.sqrt(haversine));
 }
 
 function hasValidCoordinates(lat, lng) {
-  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+  );
 }
 
+// Existing Module 3 metric: show distance to the nearest seeded landmark.
 export function locationMetric(listing) {
   const rawLocation = listing.location || listing;
   const lat = Number(rawLocation.lat);
@@ -29,7 +40,7 @@ export function locationMetric(listing) {
     };
   }
 
-  const nearest = landmarkData
+  const nearestLandmark = landmarkData
     .map((landmark) => ({
       ...landmark,
       distanceKm: haversineKm(lat, lng, landmark.lat, landmark.lng)
@@ -37,13 +48,15 @@ export function locationMetric(listing) {
     .sort((a, b) => a.distanceKm - b.distanceKm)[0];
 
   return {
-    distanceKm: Number(nearest.distanceKm.toFixed(2)),
-    metricLabel: `${nearest.distanceKm.toFixed(2)} km to ${nearest.name}`
+    distanceKm: Number(nearestLandmark.distanceKm.toFixed(2)),
+    metricLabel: `${nearestLandmark.distanceKm.toFixed(2)} km to ${nearestLandmark.name}`
   };
 }
 
+// Convert a Mongoose document into a normal object and add location metrics.
 export function serializeListing(listing) {
   if (!listing) return null;
+
   const item = listing.toObject ? listing.toObject() : listing;
   return {
     ...item,
@@ -52,16 +65,22 @@ export function serializeListing(listing) {
   };
 }
 
+// Demo fallback used only when live Foursquare nearby-place data is unavailable.
 export function nearbyPlaces(listing) {
   const metric = locationMetric(listing);
   const baseDistance = Number(metric.distanceKm || 0);
+
   return Object.entries(nearbySeed).flatMap(([category, names], categoryIndex) =>
-    names.map((name, index) => ({
-      id: `${listing._id}-${category}-${index}`,
-      category,
-      name,
-      distanceKm: Number((0.18 + categoryIndex * 0.11 + index * 0.08 + baseDistance / 20).toFixed(2)),
-      walkingMinutes: Math.round((0.18 + categoryIndex * 0.11 + index * 0.08 + baseDistance / 20) * 12)
-    }))
+    names.map((name, index) => {
+      const distanceKm = 0.18 + categoryIndex * 0.11 + index * 0.08 + baseDistance / 20;
+
+      return {
+        id: `${listing._id}-${category}-${index}`,
+        category,
+        name,
+        distanceKm: Number(distanceKm.toFixed(2)),
+        walkingMinutes: Math.round(distanceKm * 12)
+      };
+    })
   );
 }
