@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarCheck,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
@@ -20,10 +21,13 @@ import {
   ListPlus,
   LogOut,
   Mail,
+  MapPinned,
   MapPin,
   MessageSquareText,
   PanelLeft,
+  PanelLeftClose,
   PhoneCall,
+  Plus,
   Search,
   Settings,
   ShieldCheck,
@@ -180,13 +184,13 @@ const categoryPhotoAssets = {
 };
 
 const categoryOptions = [
-  { value: "all", label: "All", type: "all", propertyType: "all", serviceCategory: "all", photo: photoAssets["uploaded-photo.jpg"] },
-  { value: "Office", label: "Office", type: "property", propertyType: "Office", serviceCategory: "all", photo: photoAssets["office-floor.jpg"] },
-  { value: "Shop", label: "Shop", type: "property", propertyType: "Shop", serviceCategory: "all", photo: photoAssets["retail-front.jpg"] },
-  { value: "Interior Design", label: "Interior Design", type: "service", propertyType: "all", serviceCategory: "Interior Design", photo: photoAssets["portfolio-1.jpg"] },
-  { value: "ISP", label: "ISP", type: "service", propertyType: "all", serviceCategory: "ISP", photo: photoAssets["isp-rack.jpg"] },
-  { value: "Electrician", label: "Electrician", type: "service", propertyType: "all", serviceCategory: "Electrician", photo: photoAssets["electric-team.jpg"] },
-  { value: "Vendor", label: "Vendor", type: "service", propertyType: "all", serviceCategory: "Vendor", photo: photoAssets["uploaded-photo.jpg"] }
+  { value: "all", label: "All", type: "all", propertyType: "all", serviceCategory: "all", icon: LayoutDashboard },
+  { value: "Office", label: "Office", type: "property", propertyType: "Office", serviceCategory: "all", icon: Building2 },
+  { value: "Shop", label: "Shop", type: "property", propertyType: "Shop", serviceCategory: "all", icon: Store },
+  { value: "Interior Design", label: "Interior Design", type: "service", propertyType: "all", serviceCategory: "Interior Design", icon: Compass },
+  { value: "ISP", label: "ISP", type: "service", propertyType: "all", serviceCategory: "ISP", icon: Gauge },
+  { value: "Electrician", label: "Electrician", type: "service", propertyType: "all", serviceCategory: "Electrician", icon: Activity },
+  { value: "Vendor", label: "Vendor", type: "service", propertyType: "all", serviceCategory: "Vendor", icon: BriefcaseBusiness }
 ];
 
 const managementProfiles = {
@@ -246,12 +250,48 @@ const managementProfiles = {
   }
 };
 
-const dashboardActions = [
-  { role: "business", title: "Business Search", text: "Find spaces, compare services, save favorites and request visits.", icon: BriefcaseBusiness },
-  { role: "property", title: "Property Owner", text: "Create offices or shops, manage property inventory and handle requests.", icon: Building2 },
-  { role: "service", title: "Service Provider", text: "Publish setup packages, manage coverage areas and respond to clients.", icon: Wrench },
-  { role: "admin", title: "Admin Control", text: "Verify users, approve listings, review reports and tune settings.", icon: ShieldCheck }
-];
+const roleDashboardContent = {
+  business: {
+    title: "Find and secure the right workspace",
+    text: "Search verified spaces and services, manage visits, and keep owner conversations together.",
+    actions: [
+      { view: "marketplace", title: "Explore marketplace", text: "Search spaces and setup services.", icon: Search, tone: "green" },
+      { view: "pipeline", title: "My bookings", text: "Track visit requests and confirmations.", icon: CalendarCheck, tone: "amber" },
+      { view: "messages", title: "Owner messages", text: "Continue listing conversations.", icon: MessageSquareText, tone: "blue" },
+      { view: "workspace", title: "Saved workspace", text: "Review favorites and preferences.", icon: Bookmark, tone: "teal" }
+    ]
+  },
+  property: {
+    title: "Manage your property portfolio",
+    text: "Publish commercial spaces, keep availability accurate, and respond to business visit requests.",
+    actions: [
+      { view: "listings", title: "Property inventory", text: "Create and manage your spaces.", icon: Building2, tone: "blue" },
+      { view: "pipeline", title: "Visit requests", text: "Accept or update booking requests.", icon: CalendarCheck, tone: "amber" },
+      { view: "messages", title: "Business inquiries", text: "Reply to interested businesses.", icon: MessageSquareText, tone: "green" },
+      { view: "marketplace", title: "Market overview", text: "Review comparable verified listings.", icon: Gauge, tone: "teal" }
+    ]
+  },
+  service: {
+    title: "Grow your service business",
+    text: "Manage service packages, portfolio coverage, availability, and incoming client inquiries.",
+    actions: [
+      { view: "listings", title: "Service packages", text: "Create and manage your offers.", icon: Wrench, tone: "teal" },
+      { view: "pipeline", title: "Client requests", text: "Track service booking activity.", icon: CalendarCheck, tone: "amber" },
+      { view: "messages", title: "Client messages", text: "Reply to business inquiries.", icon: MessageSquareText, tone: "green" },
+      { view: "marketplace", title: "Marketplace", text: "See nearby spaces and opportunities.", icon: Search, tone: "blue" }
+    ]
+  },
+  admin: {
+    title: "Keep the marketplace trusted",
+    text: "Review accounts and listings, monitor operations, and resolve platform support issues.",
+    actions: [
+      { view: "admin", title: "Moderation queue", text: "Verify users and approve listings.", icon: ShieldCheck, tone: "amber" },
+      { view: "operations", title: "Platform analytics", text: "Review inventory and activity health.", icon: Gauge, tone: "blue" },
+      { view: "support", title: "Support desk", text: "Manage open platform tickets.", icon: LifeBuoy, tone: "teal" },
+      { view: "notifications", title: "Admin alerts", text: "Review important platform updates.", icon: Bell, tone: "rose" }
+    ]
+  }
+};
 
 function money(value) {
   return `BDT ${Number(value || 0).toLocaleString("en-BD")}`;
@@ -350,6 +390,19 @@ function Empty({ title }) {
   );
 }
 
+function LoadingWorkspace() {
+  return (
+    <div className="workspace-skeleton" aria-label="Loading workspace" aria-live="polite">
+      <div className="skeleton-heading"><span /><strong /></div>
+      <div className="skeleton-metrics">
+        {[1, 2, 3, 4].map((item) => <i key={item} />)}
+      </div>
+      <div className="skeleton-panels"><i /><i /></div>
+      <span className="sr-only">Loading workspace</span>
+    </div>
+  );
+}
+
 function PageHeader({ eyebrow, title, meta, children }) {
   return (
     <div className="page-header">
@@ -361,6 +414,27 @@ function PageHeader({ eyebrow, title, meta, children }) {
         {meta}
         {children}
       </div>
+    </div>
+  );
+}
+
+function ViewTabs({ label, value, onChange, items }) {
+  return (
+    <div className="view-tabs" role="tablist" aria-label={label}>
+      {items.map(({ key, label: itemLabel, icon: Icon, count }) => (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={value === key}
+          className={value === key ? "active" : ""}
+          key={key}
+          onClick={() => onChange(key)}
+        >
+          {Icon ? <Icon size={15} /> : null}
+          <span>{itemLabel}</span>
+          {count !== undefined ? <small>{count}</small> : null}
+        </button>
+      ))}
     </div>
   );
 }
@@ -694,7 +768,16 @@ export default function App() {
   const [reviewError, setReviewError] = useState("");
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
+  const [bookingTargetId, setBookingTargetId] = useState("");
   const [deleteTargetId, setDeleteTargetId] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [marketplaceView, setMarketplaceView] = useState("results");
+  const [dashboardTab, setDashboardTab] = useState("overview");
+  const [listingWorkspaceTab, setListingWorkspaceTab] = useState("manage");
+  const [workspaceTab, setWorkspaceTab] = useState("overview");
+  const [adminTab, setAdminTab] = useState("queue");
   const toastTimer = useRef(null);
   const authBootstrapRef = useRef(false);
   const conversationsRef = useRef([]);
@@ -703,6 +786,13 @@ export default function App() {
   const selectedListing = useMemo(
     () => detail?.listing || listings.find((item) => item._id === selectedListingId) || listings[0],
     [detail, listings, selectedListingId]
+  );
+
+  const bookingTargetListing = useMemo(
+    () => listings.find((item) => item._id === bookingTargetId) ||
+      favorites.find((item) => item._id === bookingTargetId) ||
+      (detail?.listing?._id === bookingTargetId ? detail.listing : null),
+    [bookingTargetId, detail, favorites, listings]
   );
 
   const deleteTargetListing = useMemo(
@@ -720,7 +810,17 @@ export default function App() {
   );
   const managementProfile = managementProfiles[role] || managementProfiles.business;
   const currentRole = roles.find((item) => item.key === role) || roles[0];
-  const CurrentRoleIcon = currentRole.icon;
+  const currentNavItem = navItems.find((item) => item.key === view);
+
+  useEffect(() => {
+    setDashboardTab("overview");
+    setListingWorkspaceTab("manage");
+    setWorkspaceTab("overview");
+    setAdminTab("queue");
+    setAdvancedFiltersOpen(false);
+    setMarketplaceView("results");
+    setMobileMenuOpen(false);
+  }, [role]);
 
   function notify(message) {
     setToast(message);
@@ -738,6 +838,8 @@ export default function App() {
       window.history[replace ? "replaceState" : "pushState"]({ view: allowedView }, "", nextPath);
     }
     setView(allowedView);
+    setMobileMenuOpen(false);
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }
 
   async function runAction(action, success) {
@@ -1121,14 +1223,6 @@ export default function App() {
     socket.emit("conversation:join", selectedConversationId);
   }, [selectedConversationId, socketStatus]);
 
-  function openRoleWorkspace(targetRole) {
-    if (targetRole !== role) {
-      notify(`Sign out and use a ${roles.find((item) => item.key === targetRole)?.label || targetRole} account to open that workspace.`);
-      return;
-    }
-    navigateToView(roleLandingViews[targetRole] || "dashboard");
-  }
-
   // Member 1 - Module 1 & 2: send the current location/filter values to the unified search API.
   async function submitSearch(event) {
     event.preventDefault();
@@ -1278,6 +1372,17 @@ export default function App() {
       await loadCore(user);
       navigateToView("pipeline");
     }, "Booking requested");
+  }
+
+  function requestBooking(id) {
+    setBookingTargetId(id);
+  }
+
+  async function confirmBooking() {
+    const id = bookingTargetId;
+    if (!id) return;
+    setBookingTargetId("");
+    await createBooking(id);
   }
 
   async function respondBooking(id, status) {
@@ -1443,11 +1548,43 @@ export default function App() {
   function openListing(id) {
     setSelectedListingId(id);
     setDetail(null);
+    setWorkspaceTab("overview");
     navigateToView("workspace");
   }
 
   function renderDashboard() {
     const queueTotal = (dashboard?.pendingUsersCount || 0) + (dashboard?.pendingListingsCount || 0) + (dashboard?.openReports || 0) + (dashboard?.openTickets || 0);
+    const roleDashboard = roleDashboardContent[role] || roleDashboardContent.business;
+    const pendingBookings = bookings.filter((booking) => ["requested", "alternate-proposed"].includes(booking.status)).length;
+    const availableInventory = inventoryListings.filter((listing) => String(listing.status).toLowerCase() === "available").length;
+    const unreadNotifications = notifications.filter((notification) => !notification.read).length;
+    const metricsByRole = {
+      business: [
+        { icon: Store, tone: "green", label: "Marketplace matches", value: number(meta.total || dashboard?.activeListings), note: `${meta.summary?.propertyCount || 0} property, ${meta.summary?.serviceCount || 0} service` },
+        { icon: CalendarCheck, tone: "amber", label: "My bookings", value: number(bookings.length), note: `${pendingBookings} awaiting response` },
+        { icon: Heart, tone: "rose", label: "Saved listings", value: number(favorites.length), note: "Ready to compare" },
+        { icon: Bell, tone: "blue", label: "Unread updates", value: number(unreadNotifications), note: `${conversations.length} conversations` }
+      ],
+      property: [
+        { icon: Building2, tone: "blue", label: "My properties", value: number(inventoryListings.length), note: `${availableInventory} available` },
+        { icon: CalendarCheck, tone: "amber", label: "Visit requests", value: number(bookings.length), note: `${pendingBookings} need attention` },
+        { icon: MessageSquareText, tone: "green", label: "Inquiries", value: number(conversations.length), note: "Business conversations" },
+        { icon: Star, tone: "teal", label: "Owner rating", value: `${Number(user?.averageRating || 0).toFixed(1)}/5`, note: `${user?.reviewCount || 0} reviews` }
+      ],
+      service: [
+        { icon: Wrench, tone: "teal", label: "My packages", value: number(inventoryListings.length), note: `${availableInventory} available` },
+        { icon: CalendarCheck, tone: "amber", label: "Client requests", value: number(bookings.length), note: `${pendingBookings} need attention` },
+        { icon: MessageSquareText, tone: "green", label: "Inquiries", value: number(conversations.length), note: "Client conversations" },
+        { icon: Star, tone: "blue", label: "Provider rating", value: `${Number(user?.averageRating || 0).toFixed(1)}/5`, note: `${user?.reviewCount || 0} reviews` }
+      ],
+      admin: [
+        { icon: Store, tone: "green", label: "Active listings", value: number(dashboard?.activeListings), note: `${dashboard?.properties || 0} property, ${dashboard?.services || 0} service` },
+        { icon: UsersRound, tone: "blue", label: "Platform users", value: number(dashboard?.users), note: `${dashboard?.pendingUsersCount || 0} pending verification` },
+        { icon: CalendarCheck, tone: "amber", label: "Bookings", value: number(dashboard?.bookings), note: `${operations?.operations?.conversionRate || 0}% conversion` },
+        { icon: Activity, tone: "rose", label: "Open queue", value: number(queueTotal), note: "Moderation and support" }
+      ]
+    };
+    const roleMetrics = metricsByRole[role] || metricsByRole.business;
     const statusRows = [
       { label: "Verification", value: `${(dashboard?.pendingUsersCount || 0) + (dashboard?.pendingListingsCount || 0)} pending review`, status: queueTotal ? "attention" : "healthy" },
       { label: "Marketplace", value: `${number(dashboard?.activeListings)} active listings`, status: "healthy" },
@@ -1458,72 +1595,92 @@ export default function App() {
     return (
       <>
         <PageHeader
-          eyebrow="Command Center"
-          title="OfficeKhoj BD Operations"
-          meta={<Status value={operations?.database?.status || "connecting"} />}
+          eyebrow={`${currentRole.label} workspace`}
+          title={`${currentRole.label} Dashboard`}
+          meta={<Status value={role === "admin" ? (operations?.database?.status || "connecting") : (user?.verificationStatus || "active")} />}
         >
           <button className="action secondary" type="button" onClick={() => loadCore(user)}><Activity size={16} />Refresh</button>
         </PageHeader>
 
-        <section className="dashboard-command">
-          <div>
-            <span className="eyebrow">Live Platform</span>
-            <h3>Commercial space discovery and setup-service management</h3>
-            <p>Role-based workflows for business owners, property owners, service providers and administrators.</p>
-          </div>
-          <div className="dashboard-action-grid">
-            {dashboardActions.map(({ role: targetRole, title, text, icon: Icon }) => (
-              <button className="dashboard-action" type="button" key={targetRole} onClick={() => openRoleWorkspace(targetRole)}>
-                <IconFrame icon={Icon} tone={targetRole === "admin" ? "amber" : targetRole === "service" ? "teal" : targetRole === "property" ? "blue" : "green"} />
-                <span className="dashboard-action-title">{title}</span>
-                <p>{text}</p>
-              </button>
-            ))}
-          </div>
-        </section>
+        {role === "admin" ? (
+          <ViewTabs
+            label="Dashboard sections"
+            value={dashboardTab}
+            onChange={setDashboardTab}
+            items={[
+              { key: "overview", label: "Overview", icon: LayoutDashboard },
+              { key: "insights", label: "Market insights", icon: Gauge },
+              { key: "health", label: "Workflow health", icon: Activity, count: queueTotal }
+            ]}
+          />
+        ) : null}
 
-        <section className="metric-grid">
-          <MetricCard icon={Store} tone="green" label="Active Listings" value={number(dashboard?.activeListings)} note={`${dashboard?.properties || 0} property, ${dashboard?.services || 0} service`} />
-          <MetricCard icon={UsersRound} tone="blue" label="Users" value={number(dashboard?.users)} note={`${dashboard?.pendingUsersCount || 0} pending verification`} />
-          <MetricCard icon={CalendarCheck} tone="amber" label="Bookings" value={number(dashboard?.bookings)} note={`${operations?.operations?.conversionRate || 0}% conversion`} />
-          <MetricCard icon={Star} tone="teal" label="Reviews" value={`${dashboard?.averageRating || "0.0"}/5`} note={`${dashboard?.totalReviews || 0} total reviews`} />
-        </section>
+        {dashboardTab === "overview" ? (
+          <>
+            <section className="dashboard-command">
+              <div>
+                <span className="eyebrow">{currentRole.label} activity</span>
+                <h3>{roleDashboard.title}</h3>
+                <p>{roleDashboard.text}</p>
+              </div>
+              <div className="dashboard-action-grid">
+                {roleDashboard.actions.map(({ view: targetView, title, text, icon: Icon, tone }) => (
+                  <button className="dashboard-action" type="button" key={targetView} onClick={() => navigateToView(targetView)}>
+                    <IconFrame icon={Icon} tone={tone} />
+                    <span className="dashboard-action-title">{title}</span>
+                    <p>{text}</p>
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section className="metric-grid">
+              {roleMetrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
+            </section>
+          </>
+        ) : null}
 
-        <section className="dashboard-grid">
-          <div className="panel">
-            <div className="panel-head"><h3>Demand by Area</h3><Pill tone="neutral">Live aggregate</Pill></div>
-            <div className="data-list">
-              {(operations?.areaDemand || []).map((item) => <DataBar key={item.area} label={item.area} value={item.count} max={maxArea} note={`${item.count} - ${money(item.avgPrice)}`} />)}
+        {role === "admin" && dashboardTab === "insights" ? (
+          <section className="dashboard-grid dashboard-grid-focused">
+            <div className="panel">
+              <div className="panel-head"><h3>Demand by Area</h3><Pill tone="neutral">Live aggregate</Pill></div>
+              <div className="data-list">
+                {(operations?.areaDemand || []).map((item) => <DataBar key={item.area} label={item.area} value={item.count} max={maxArea} note={`${item.count} - ${money(item.avgPrice)}`} />)}
+              </div>
             </div>
-          </div>
-          <div className="panel">
-            <div className="panel-head"><h3>Category Mix</h3><Pill tone="neutral">Marketplace</Pill></div>
-            <div className="data-list">
-              {(operations?.categoryMix || []).map((item) => <DataBar key={item.category} label={item.category} value={item.count} max={maxCategory} note={`${item.count} - ${money(item.avgPrice)}`} />)}
+            <div className="panel">
+              <div className="panel-head"><h3>Category Mix</h3><Pill tone="neutral">Marketplace</Pill></div>
+              <div className="data-list">
+                {(operations?.categoryMix || []).map((item) => <DataBar key={item.category} label={item.category} value={item.count} max={maxCategory} note={`${item.count} - ${money(item.avgPrice)}`} />)}
+              </div>
             </div>
-          </div>
-          <div className="panel">
-            <div className="panel-head"><h3>Review Queue</h3><Pill tone="warning">{(dashboard?.pendingUsersCount || 0) + (dashboard?.pendingListingsCount || 0) + (dashboard?.openReports || 0) + (dashboard?.openTickets || 0)} items</Pill></div>
-            <div className="queue-grid">
-              <MetricCard icon={UserRound} tone="amber" label="Users" value={number(dashboard?.pendingUsersCount)} />
-              <MetricCard icon={Building2} tone="blue" label="Listings" value={number(dashboard?.pendingListingsCount)} />
-              <MetricCard icon={Activity} tone="rose" label="Reports" value={number(dashboard?.openReports)} />
-              <MetricCard icon={LifeBuoy} tone="teal" label="Tickets" value={number(dashboard?.openTickets)} />
+          </section>
+        ) : null}
+
+        {role === "admin" && dashboardTab === "health" ? (
+          <section className="dashboard-grid dashboard-grid-focused">
+            <div className="panel">
+              <div className="panel-head"><h3>Review Queue</h3><Pill tone="warning">{queueTotal} items</Pill></div>
+              <div className="queue-grid">
+                <MetricCard icon={UserRound} tone="amber" label="Users" value={number(dashboard?.pendingUsersCount)} />
+                <MetricCard icon={Building2} tone="blue" label="Listings" value={number(dashboard?.pendingListingsCount)} />
+                <MetricCard icon={Activity} tone="rose" label="Reports" value={number(dashboard?.openReports)} />
+                <MetricCard icon={LifeBuoy} tone="teal" label="Tickets" value={number(dashboard?.openTickets)} />
+              </div>
             </div>
-          </div>
-          <div className="panel">
-            <div className="panel-head"><h3>Workflow Health</h3><Pill tone="success">Operational</Pill></div>
-            <div className="data-list">
-              {statusRows.map((item) => (
-                <div className="system-row" key={item.label}>
-                  <IconFrame icon={CheckCircle2} tone={item.status === "attention" ? "amber" : "green"} />
-                  <div><strong>{item.label}</strong><p>{item.value}</p></div>
-                  <Status value={item.status} />
-                </div>
-              ))}
+            <div className="panel">
+              <div className="panel-head"><h3>Workflow Health</h3><Pill tone="success">Operational</Pill></div>
+              <div className="data-list">
+                {statusRows.map((item) => (
+                  <div className="system-row" key={item.label}>
+                    <IconFrame icon={CheckCircle2} tone={item.status === "attention" ? "amber" : "green"} />
+                    <div><strong>{item.label}</strong><p>{item.value}</p></div>
+                    <Status value={item.status} />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
       </>
     );
   }
@@ -1531,25 +1688,54 @@ export default function App() {
   function renderMarketplace() {
     const summary = meta.summary || {};
     const pages = visiblePages(meta.page, meta.totalPages);
+    const advancedFilterCount = [
+      searchDraft.propertyType !== "all",
+      searchDraft.serviceCategory !== "all",
+      Number(searchDraft.minPrice) > 0,
+      Number(searchDraft.maxPrice) !== Number(initialSearchQuery.maxPrice),
+      Number(searchDraft.minSize) > 0,
+      Number(searchDraft.maxSize) > 0
+    ].filter(Boolean).length;
     return (
       <>
         <PageHeader eyebrow="Marketplace" title="Commercial Spaces and Setup Services" meta={<Pill tone="neutral">{meta.total || 0} matches</Pill>} />
         {/* Member 1 - Module 1 & 2: location + type/category + price/size filters. */}
-        <form className="filter-bar member-search-filter" onSubmit={submitSearch}>
-          <label className="area-filter">Area / location<input name="area" placeholder="e.g. Banani, Dhaka" value={searchDraft.area} onChange={(event) => updateSearchDraft("area", event.target.value)} /></label>
-          <label>Result type<select name="type" value={searchDraft.type} onChange={(event) => updateSearchDraft("type", event.target.value)}><option value="all">Spaces + services</option><option value="property">Commercial spaces</option><option value="service">Setup services</option></select></label>
-          <label>Space type<select name="propertyType" value={searchDraft.propertyType} onChange={(event) => updateSearchDraft("propertyType", event.target.value)}><option value="all">All spaces</option>{propertyTypeValues.map((category) => <option key={category}>{category}</option>)}</select></label>
-          <label>Service category<select name="serviceCategory" value={searchDraft.serviceCategory} onChange={(event) => updateSearchDraft("serviceCategory", event.target.value)}><option value="all">All services</option>{serviceCategoryValues.map((category) => <option key={category}>{category}</option>)}</select></label>
-          <label>Min price<input name="minPrice" type="number" min="0" value={searchDraft.minPrice} onChange={(event) => updateSearchDraft("minPrice", event.target.value)} /></label>
-          <label>Max price<input name="maxPrice" type="number" min="0" value={searchDraft.maxPrice} onChange={(event) => updateSearchDraft("maxPrice", event.target.value)} /></label>
-          <label>Min size (sq ft)<input name="minSize" type="number" min="0" value={searchDraft.minSize} onChange={(event) => updateSearchDraft("minSize", event.target.value)} /></label>
-          <label>Max size (sq ft)<input name="maxSize" type="number" min="0" value={searchDraft.maxSize} onChange={(event) => updateSearchDraft("maxSize", event.target.value)} /></label>
-          <label>Sort<select name="sort" value={searchDraft.sort} onChange={(event) => updateSearchDraft("sort", event.target.value)}><option value="distance">Distance from area</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option><option value="rating">Rating</option><option value="newest">Newest</option></select></label>
-          <button className="action primary" type="submit"><SlidersHorizontal size={16} />Search & Apply</button>
-          {hasSavedSearchPreferences(user) ? (
-            <button className="action secondary" type="button" onClick={applySavedPreferences}><Bookmark size={16} />Use Saved Preferences</button>
+        <form className="filter-bar member-search-filter progressive-filter" onSubmit={submitSearch}>
+          <div className="filter-core">
+            <label className="area-filter">Area / location<input name="area" placeholder="e.g. Banani, Dhaka" value={searchDraft.area} onChange={(event) => updateSearchDraft("area", event.target.value)} /></label>
+            <label>Result type<select name="type" value={searchDraft.type} onChange={(event) => updateSearchDraft("type", event.target.value)}><option value="all">Spaces + services</option><option value="property">Commercial spaces</option><option value="service">Setup services</option></select></label>
+            <label>Sort<select name="sort" value={searchDraft.sort} onChange={(event) => updateSearchDraft("sort", event.target.value)}><option value="distance">Nearest first</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option><option value="rating">Top rated</option><option value="newest">Newest</option></select></label>
+            <button className="action primary" type="submit"><Search size={16} />Search</button>
+            <button
+              className={`action filter-toggle ${advancedFiltersOpen ? "active" : ""}`}
+              type="button"
+              aria-expanded={advancedFiltersOpen}
+              onClick={() => setAdvancedFiltersOpen((current) => !current)}
+            >
+              <SlidersHorizontal size={16} />Filters
+              {advancedFilterCount ? <small>{advancedFilterCount}</small> : null}
+              <ChevronDown size={15} />
+            </button>
+          </div>
+          {advancedFiltersOpen ? (
+            <div className="advanced-filter-panel">
+              <div className="advanced-filter-grid">
+                <label>Space type<select name="propertyType" value={searchDraft.propertyType} onChange={(event) => updateSearchDraft("propertyType", event.target.value)}><option value="all">All spaces</option>{propertyTypeValues.map((category) => <option key={category}>{category}</option>)}</select></label>
+                <label>Service category<select name="serviceCategory" value={searchDraft.serviceCategory} onChange={(event) => updateSearchDraft("serviceCategory", event.target.value)}><option value="all">All services</option>{serviceCategoryValues.map((category) => <option key={category}>{category}</option>)}</select></label>
+                <label>Min price<input name="minPrice" type="number" min="0" value={searchDraft.minPrice} onChange={(event) => updateSearchDraft("minPrice", event.target.value)} /></label>
+                <label>Max price<input name="maxPrice" type="number" min="0" value={searchDraft.maxPrice} onChange={(event) => updateSearchDraft("maxPrice", event.target.value)} /></label>
+                <label>Min size (sq ft)<input name="minSize" type="number" min="0" value={searchDraft.minSize} onChange={(event) => updateSearchDraft("minSize", event.target.value)} /></label>
+                <label>Max size (sq ft)<input name="maxSize" type="number" min="0" value={searchDraft.maxSize} onChange={(event) => updateSearchDraft("maxSize", event.target.value)} /></label>
+              </div>
+              <div className="filter-footer-actions">
+                {hasSavedSearchPreferences(user) ? (
+                  <button className="action secondary" type="button" onClick={applySavedPreferences}><Bookmark size={16} />Use saved preferences</button>
+                ) : null}
+                <button className="action secondary" type="button" onClick={() => applySearch(initialSearchQuery)}>Clear all</button>
+                <button className="action primary" type="submit"><SlidersHorizontal size={16} />Apply filters</button>
+              </div>
+            </div>
           ) : null}
-          <button className="action secondary" type="button" onClick={() => applySearch(initialSearchQuery)}>Reset</button>
         </form>
         {meta.searchLocation ? (
           <div className="geocode-status" aria-live="polite">
@@ -1563,8 +1749,10 @@ export default function App() {
         ) : null}
         {meta.geocodeWarning ? <p className="geocode-warning">{meta.geocodeWarning}</p> : null}
         <div className="photo-option-grid">
-          {categoryOptions.map((option) => (
-            <button
+          {categoryOptions.map((option) => {
+            const OptionIcon = option.icon;
+            return (
+              <button
               type="button"
               className={`photo-option ${
                 option.value === "all"
@@ -1574,18 +1762,11 @@ export default function App() {
               key={option.value}
               onClick={() => selectCategoryOption(option)}
             >
-              <img
-                src={option.photo}
-                alt={`${option.label} option`}
-                loading="lazy"
-                onError={(event) => {
-                  event.currentTarget.onerror = null;
-                  event.currentTarget.src = photoAssets["uploaded-photo.jpg"];
-                }}
-              />
-              <span>{option.label}</span>
-            </button>
-          ))}
+                <span className="category-option-icon"><OptionIcon size={17} /></span>
+                <span className="category-option-label">{option.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         <section className="metric-grid compact-metrics">
@@ -1595,16 +1776,27 @@ export default function App() {
           <MetricCard icon={MapPin} tone="amber" label="Areas" value={asList(summary.areas)} />
         </section>
 
-        <section className="market-grid">
-          <div className="panel">
+        <ViewTabs
+          label="Marketplace display"
+          value={marketplaceView}
+          onChange={setMarketplaceView}
+          items={[
+            { key: "results", label: "Listing results", icon: Store, count: meta.total || 0 },
+            { key: "map", label: "Map view", icon: MapPinned }
+          ]}
+        />
+
+        {marketplaceView === "map" ? (
+          <section className="panel marketplace-map-panel">
             <div className="panel-head"><h3>{meta.searchLocation?.area ? `${meta.searchLocation.area} Map` : "Unified Map"}</h3><Pill tone="neutral">Properties + services</Pill></div>
             {/* Same map shows P = property, S = service and the searched-area circle. */}
             <ListingMap listings={listings} searchLocation={meta.searchLocation} />
-          </div>
-          <div className="panel listing-panel">
+          </section>
+        ) : (
+          <section className="panel listing-panel marketplace-results-panel">
             <div className="panel-head"><h3>Verified Matches</h3><Pill tone="neutral">Page {meta.page || 1}/{meta.totalPages || 1}</Pill></div>
             {listings.length ? listings.map((listing) => (
-              <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} canEngage={role === "business"} />
+              <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={requestBooking} onMessage={startConversation} canEngage={role === "business"} />
             )) : <Empty title="No matches" />}
             {Number(meta.totalPages || 1) > 1 ? (
               <div className="pagination-controls" aria-label="Listing pages">
@@ -1626,8 +1818,8 @@ export default function App() {
                 </button>
               </div>
             ) : null}
-          </div>
-        </section>
+          </section>
+        )}
       </>
     );
   }
@@ -1637,9 +1829,24 @@ export default function App() {
     const inventory = profile.canCreate || role === "admin" ? inventoryListings : listings;
     return (
       <>
-        <PageHeader eyebrow={profile.eyebrow} title={profile.title} meta={<Pill tone="neutral">{inventoryMeta.total || inventory.length} records</Pill>} />
-        <section className="split-layout">
+        <PageHeader eyebrow={profile.eyebrow} title={profile.title} meta={<Pill tone="neutral">{inventoryMeta.total || inventory.length} records</Pill>}>
           {profile.canCreate ? (
+            <button className="action primary" type="button" onClick={() => setListingWorkspaceTab("create")}><Plus size={16} />New listing</button>
+          ) : null}
+        </PageHeader>
+        {profile.canCreate ? (
+          <ViewTabs
+            label="Listing workspace sections"
+            value={listingWorkspaceTab}
+            onChange={setListingWorkspaceTab}
+            items={[
+              { key: "manage", label: "Manage inventory", icon: Store, count: inventory.length },
+              { key: "create", label: profile.listingType === "service" ? "Create package" : "Create property", icon: Plus }
+            ]}
+          />
+        ) : null}
+        <section className="single-focus-layout">
+          {profile.canCreate && listingWorkspaceTab === "create" ? (
             user?.verificationStatus === "verified" ? (
               <form className="panel form-panel" onSubmit={createListing}>
                 <div className="panel-head"><h3>{profile.createTitle}</h3><Pill tone="success">Verified account</Pill></div>
@@ -1681,17 +1888,9 @@ export default function App() {
                 <Pill tone="warning">Current status: {user?.verificationStatus || "pending"}</Pill>
               </div>
             )
-          ) : (
-            <div className="panel role-workflow-panel">
-              <IconFrame icon={role === "admin" ? ShieldCheck : BriefcaseBusiness} tone={role === "admin" ? "amber" : "green"} />
-              <h3>{profile.badge}</h3>
-              <p>{profile.inventoryNote}</p>
-              <button className="action primary" type="button" onClick={() => navigateToView(role === "admin" ? "admin" : "marketplace")}>
-                {role === "admin" ? "Open Admin Panel" : "Open Marketplace"}
-              </button>
-            </div>
-          )}
-          <div className="panel listing-panel">
+          ) : null}
+          {(!profile.canCreate || listingWorkspaceTab === "manage") ? (
+            <div className="panel listing-panel">
             <div className="panel-head"><h3>{profile.inventoryTitle}</h3><Pill tone="success">{inventory.length} shown</Pill></div>
             {inventory.length ? inventory.map((listing) => (
               profile.canCreate ? (
@@ -1716,10 +1915,11 @@ export default function App() {
                   canManage={user?.verificationStatus === "verified"}
                 />
               ) : (
-                <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} canEngage={role === "business"} />
+                <ListingRow key={listing._id} listing={listing} onOpen={openListing} onSave={saveFavorite} onBook={requestBooking} onMessage={startConversation} canEngage={role === "business"} />
               )
             )) : <Empty title="No listings yet" />}
-          </div>
+            </div>
+          ) : null}
         </section>
       </>
     );
@@ -1777,6 +1977,7 @@ export default function App() {
           setSelectedConversationId(id);
           loadMessages(id);
         }}
+        onBack={() => setSelectedConversationId("")}
         onSend={sendMessage}
         busy={busy}
       />
@@ -1809,8 +2010,21 @@ export default function App() {
     return (
       <>
         <PageHeader eyebrow="Workspace" title={listing?.title || "Client Workspace"} meta={listing && <Status value={listing.status} />} />
-        <section className="workspace-grid">
-          <div className="panel detail-panel">
+        <ViewTabs
+          label="Workspace sections"
+          value={workspaceTab}
+          onChange={setWorkspaceTab}
+          items={[
+            { key: "overview", label: "Overview", icon: Store },
+            { key: "nearby", label: "Nearby & services", icon: MapPinned },
+            { key: "reviews", label: "Reviews", icon: Star, count: reviewCount },
+            { key: "profile", label: "My profile", icon: UserRound },
+            ...(role === "business" ? [{ key: "favorites", label: "Saved", icon: Heart, count: favorites.length }] : [])
+          ]}
+        />
+        <section className="workspace-grid workspace-focus-grid">
+          {workspaceTab === "overview" ? (
+            <div className="panel detail-panel">
             {listing ? (
               <>
                 <div className="gallery-grid">
@@ -1846,8 +2060,11 @@ export default function App() {
                 </div>
               </>
             ) : <Empty title="No listing selected" />}
-          </div>
-          <div className="panel">
+            </div>
+          ) : null}
+          {workspaceTab === "nearby" ? (
+            <>
+              <div className="panel">
             <div className="panel-head">
               {/* Member 2 - Module 3: live Foursquare data, with demo fallback from the backend. */}
               <h3>Nearby Places</h3>
@@ -1871,14 +2088,17 @@ export default function App() {
               ))}
               {!(detail?.nearbyPlaces || []).length ? <Empty title="No nearby places found" /> : null}
             </div>
-          </div>
-          <div className="panel">
+              </div>
+              <div className="panel">
             <div className="panel-head"><h3>Setup Suggestions</h3><Pill tone="neutral">{detail?.setupSuggestions?.length || 0}</Pill></div>
             {(detail?.setupSuggestions || []).map((item) => (
-              <ListingRow key={item._id} listing={item} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} canEngage={role === "business"} />
+              <ListingRow key={item._id} listing={item} onOpen={openListing} onSave={saveFavorite} onBook={requestBooking} onMessage={startConversation} canEngage={role === "business"} />
             ))}
-          </div>
-          <div className="panel">
+              </div>
+            </>
+          ) : null}
+          {workspaceTab === "reviews" ? (
+            <div className="panel">
             <div className="panel-head"><h3>Reviews</h3><Pill tone="neutral">{reviewCount}</Pill></div>
             <div className="review-summary">
               <div className="review-score">
@@ -1957,8 +2177,10 @@ export default function App() {
                 </div>
               )
             )}
-          </div>
-          <form className="panel form-panel" onSubmit={updateProfile} key={user?._id || "profile-form"}>
+            </div>
+          ) : null}
+          {workspaceTab === "profile" ? (
+            <form className="panel form-panel" onSubmit={updateProfile} key={user?._id || "profile-form"}>
             <div className="panel-head"><h3>Profile</h3><Pill tone="neutral">{user?.role}</Pill></div>
             <ProviderRatingLine profile={user} />
             <label>Business type<input name="businessType" defaultValue={user?.businessType || ""} /></label>
@@ -1970,11 +2192,12 @@ export default function App() {
             <label>Preferred min size<input name="minSize" type="number" min="0" defaultValue={user?.minSize || 0} /></label>
             <label>Service need<input name="serviceNeed" defaultValue={user?.serviceNeed || ""} /></label>
             <button className="action primary" type="submit"><Bookmark size={16} />Save Profile</button>
-          </form>
-          {role === "business" ? (
+            </form>
+          ) : null}
+          {role === "business" && workspaceTab === "favorites" ? (
             <div className="panel listing-panel">
               <div className="panel-head"><h3>Favorites</h3><Pill tone="neutral">{favorites.length}</Pill></div>
-              {favorites.map((item) => <ListingRow key={item._id} listing={item} onOpen={openListing} onSave={saveFavorite} onBook={createBooking} onMessage={startConversation} canEngage />)}
+              {favorites.map((item) => <ListingRow key={item._id} listing={item} onOpen={openListing} onSave={saveFavorite} onBook={requestBooking} onMessage={startConversation} canEngage />)}
             </div>
           ) : null}
         </section>
@@ -2080,8 +2303,19 @@ export default function App() {
     return (
       <>
         <PageHeader eyebrow="Admin" title="Verification, Moderation and Settings" meta={<Pill tone="warning">{(admin.pendingUsers?.length || 0) + (admin.pendingListings?.length || 0) + (admin.reports?.length || 0)} queue</Pill>} />
+        <ViewTabs
+          label="Admin sections"
+          value={adminTab}
+          onChange={setAdminTab}
+          items={[
+            { key: "queue", label: "Moderation queue", icon: ShieldCheck, count: (admin.pendingUsers?.length || 0) + (admin.pendingListings?.length || 0) + (admin.reports?.length || 0) },
+            { key: "settings", label: "Platform settings", icon: Settings, count: operations?.settings?.length || 0 }
+          ]}
+        />
         <section className="admin-grid">
-          <div className="panel">
+          {adminTab === "queue" ? (
+            <>
+              <div className="panel">
             <div className="panel-head"><h3>Pending Users</h3><Pill tone="neutral">{admin.pendingUsers?.length || 0}</Pill></div>
             {(admin.pendingUsers || []).map((pending) => (
               <div className="admin-row" key={pending._id}>
@@ -2090,8 +2324,8 @@ export default function App() {
                 <button className="action primary small" type="button" onClick={() => verifyUser(pending._id)}><CheckCircle2 size={15} />Verify</button>
               </div>
             ))}
-          </div>
-          <div className="panel">
+              </div>
+              <div className="panel">
             <div className="panel-head"><h3>Pending Listings</h3><Pill tone="neutral">{admin.pendingListings?.length || 0}</Pill></div>
             {(admin.pendingListings || []).map((listing) => (
               <div className="admin-row" key={listing._id}>
@@ -2100,8 +2334,8 @@ export default function App() {
                 <button className="action primary small" type="button" onClick={() => moderateListing(listing._id)}><ClipboardCheck size={15} />Approve</button>
               </div>
             ))}
-          </div>
-          <div className="panel">
+              </div>
+              <div className="panel">
             <div className="panel-head"><h3>Reports</h3><Pill tone="neutral">{admin.reports?.length || 0}</Pill></div>
             {(admin.reports || []).map((report) => (
               <div className="admin-row" key={report._id}>
@@ -2110,8 +2344,11 @@ export default function App() {
                 <Status value={report.status} />
               </div>
             ))}
-          </div>
-          <div className="panel settings-panel">
+              </div>
+            </>
+          ) : null}
+          {adminTab === "settings" ? (
+            <div className="panel settings-panel">
             <div className="panel-head"><h3>Settings</h3><Pill tone="neutral">{operations?.settings?.length || 0}</Pill></div>
             {(operations?.settings || []).map((setting) => (
               <form className="setting-row" key={setting._id} onSubmit={updateSetting}>
@@ -2129,7 +2366,8 @@ export default function App() {
                 <button className="action secondary small" type="submit"><Settings size={15} />Save</button>
               </form>
             ))}
-          </div>
+            </div>
+          ) : null}
         </section>
       </>
     );
@@ -2166,10 +2404,25 @@ export default function App() {
       <header className="app-topbar">
         <div className="brand">
           <span className="brand-mark"><Building2 size={23} /></span>
-          <div><h1>OfficeKhoj BD</h1><p>Commercial space operations</p></div>
+          <div><h1>OfficeKhoj</h1><p>Bangladesh</p></div>
+        </div>
+        <button
+          className="navigation-toggle"
+          type="button"
+          aria-label={mobileMenuOpen ? "Close navigation" : sidebarCollapsed ? "Expand navigation" : "Toggle navigation"}
+          aria-expanded={mobileMenuOpen || !sidebarCollapsed}
+          onClick={() => {
+            if (window.matchMedia("(max-width: 1020px)").matches) setMobileMenuOpen((current) => !current);
+            else setSidebarCollapsed((current) => !current);
+          }}
+        >
+          {mobileMenuOpen ? <XCircle size={19} /> : sidebarCollapsed ? <PanelLeft size={19} /> : <PanelLeftClose size={19} />}
+        </button>
+        <div className="topbar-context">
+          <span>OfficeKhoj BD</span>
+          <strong>{currentNavItem?.label || "Dashboard"}</strong>
         </div>
         <div className="role-switcher auth-session-actions">
-          <span className="current-role-pill"><CurrentRoleIcon size={15} />{currentRole.label}</span>
           <button type="button" onClick={logout} title="Sign out of OfficeKhoj BD"><LogOut size={15} />Logout</button>
         </div>
         <div className="account-chip">
@@ -2182,9 +2435,13 @@ export default function App() {
         </div>
       </header>
 
-      <main className="app-shell">
-        <aside className="sidebar">
-          <span className="sidebar-label">Menu</span>
+      <main className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+        {mobileMenuOpen ? <button className="mobile-nav-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileMenuOpen(false)} /> : null}
+        <aside className={`sidebar ${mobileMenuOpen ? "open" : ""}`} aria-label={`${currentRole.label} navigation`}>
+          <div className="sidebar-heading">
+            <span className="sidebar-label">{currentRole.label} menu</span>
+            <button className="sidebar-close" type="button" aria-label="Close navigation" onClick={() => setMobileMenuOpen(false)}><XCircle size={18} /></button>
+          </div>
           {navItems.filter(({ key }) => canAccessView(role, key)).map(({ key, label, icon: Icon }) => {
             const badge = key === "notifications"
               ? notifications.filter((item) => !item.read).length
@@ -2195,9 +2452,9 @@ export default function App() {
                   )).length, 0)
                 : 0;
             return (
-              <button type="button" className={`nav-item ${view === key ? "active" : ""}`} key={key} onClick={() => navigateToView(key)}>
+              <button type="button" className={`nav-item ${view === key ? "active" : ""}`} key={key} onClick={() => navigateToView(key)} title={sidebarCollapsed ? label : undefined}>
                 <Icon size={17} />
-                <span>{label}</span>
+                <span className="nav-label">{label}</span>
                 {badge > 0 && <strong className="nav-badge">{badge}</strong>}
               </button>
             );
@@ -2205,12 +2462,32 @@ export default function App() {
         </aside>
 
         <section className="content">
-          {dashboard && operations ? (views[view] || views[roleLandingViews[role]])() : <div className="loading-panel"><Database size={24} /><strong>Loading workspace</strong></div>}
+          {dashboard && operations ? (views[view] || views[roleLandingViews[role]])() : <LoadingWorkspace />}
         </section>
       </main>
 
       {busy && <div className="busy-line" />}
       {toast && <div className="toast">{toast}</div>}
+      {bookingTargetId && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setBookingTargetId("")}>
+          <div className="confirm-modal booking-modal" role="dialog" aria-modal="true" aria-labelledby="booking-modal-title" onClick={(event) => event.stopPropagation()}>
+            <IconFrame icon={CalendarCheck} tone="green" />
+            <div>
+              <span className="eyebrow">Booking request</span>
+              <h3 id="booking-modal-title">Request a guided visit?</h3>
+              <p>Send a visit request for <strong>{bookingTargetListing?.title || "this listing"}</strong>. The proposed time will be tomorrow and the owner can accept or suggest an alternative.</p>
+            </div>
+            <div className="booking-summary">
+              <span><MapPin size={15} />{bookingTargetListing?.area || "Dhaka"}</span>
+              <strong>{money(bookingTargetListing?.price)}</strong>
+            </div>
+            <div className="modal-actions">
+              <button className="action secondary" type="button" onClick={() => setBookingTargetId("")}>Cancel</button>
+              <button className="action primary" type="button" onClick={confirmBooking}><CalendarCheck size={16} />Request visit</button>
+            </div>
+          </div>
+        </div>
+      )}
       {deleteTargetId && (
         <div className="modal-backdrop" role="presentation" onClick={() => setDeleteTargetId("")}>
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-listing-title" onClick={(event) => event.stopPropagation()}>

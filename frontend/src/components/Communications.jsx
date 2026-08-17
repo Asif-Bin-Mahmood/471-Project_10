@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import {
+  ArrowLeft,
   Bell,
   CalendarCheck,
   CheckCheck,
@@ -95,6 +96,7 @@ export function MessagesPage({
   filter,
   onFilter,
   onSelect,
+  onBack,
   onSend,
   busy
 }) {
@@ -139,7 +141,7 @@ export function MessagesPage({
   return (
     <div className="communications-page messages-page">
       <CommunicationsHeader title="Messages" subtitle={`${conversations.length} conversation${conversations.length === 1 ? "" : "s"}`} />
-      <section className="messages-workspace">
+      <section className={`messages-workspace ${selectedConversation ? "has-selection" : "show-list"}`}>
         <aside className="conversation-column">
           <div className="conversation-tools">
             <label className="conversation-search">
@@ -192,6 +194,7 @@ export function MessagesPage({
           ) : (
             <form className="active-conversation" onSubmit={onSend}>
               <header className="active-conversation-header">
+                <button className="mobile-conversation-back" type="button" aria-label="Back to conversations" onClick={onBack}><ArrowLeft size={18} /></button>
                 <Avatar name={selectedParticipant?.name || selectedConversation.subject} size="small" />
                 <div><strong>{selectedParticipant?.name || selectedConversation.subject}</strong><p>{roleLabel(selectedParticipant?.role)}{selectedConversation.listing?.title ? ` · ${selectedConversation.listing.title}` : ""}</p></div>
                 <span className={`realtime-status ${socketStatus}`}>{connectionLabel}</span>
