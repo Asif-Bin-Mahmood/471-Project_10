@@ -17,6 +17,11 @@ import { attachProviderRating } from "../utils/providerRating.js";
 const PROPERTY_CATEGORIES = ["Office", "Shop"];
 const SERVICE_CATEGORIES = ["Interior", "Interior Design", "ISP", "Electrician", "Vendor"];
 
+const SETUP_CATEGORIES_BY_PROPERTY = {
+  Office: ["Interior", "Interior Design", "ISP", "Electrician", "Vendor"],
+  Shop: ["Interior", "Interior Design", "Electrician", "ISP", "Vendor"]
+};
+
 const OWNER_ROLE_BY_TYPE = {
   property: "property-owner",
   service: "service-provider"
@@ -395,17 +400,41 @@ async function loadNearbyPlaces(listing) {
   }
 }
 
-async function findSetupServicesForArea(area) {
-  const verifiedServiceOwners = await getVerifiedOwnerIds("service-provider");
+// Member 3 - Module 3: deterministic setup matching from stored category and coverage data.
+async function findSetupServicesForListing(propertyListing) {
+  if (propertyListing?.listingType !== "property") return [];
+
+  const area = String(propertyListing.area || "").trim();
+  const categories = SETUP_CATEGORIES_BY_PROPERTY[propertyListing.category] || SERVICE_CATEGORIES;
+  if (!area || !categories.length) return [];
+
+  const coveragePattern = new RegExp(escapeRegex(area), "i");
+  const verifiedOwners = await User.find({
+    role: "service-provider",
+    verificationStatus: "verified",
+    status: "active"
+  })
+    .select("_id coverageAreas")
+    .lean();
+
+  const verifiedOwnerIds = verifiedOwners.map((owner) => owner._id);
+  const ownerCoverageIds = verifiedOwners
+    .filter((owner) => (owner.coverageAreas || []).some((coverageArea) => coveragePattern.test(coverageArea)))
+    .map((owner) => owner._id);
 
   return Listing.find({
     listingType: "service",
-    owner: { $in: verifiedServiceOwners },
+    owner: { $in: verifiedOwnerIds },
+    category: { $in: categories },
     status: "Available",
     verificationStatus: "verified",
-    coverageAreas: new RegExp(escapeRegex(area), "i")
+    $or: [
+      { coverageAreas: coveragePattern },
+      { owner: { $in: ownerCoverageIds } }
+    ]
   })
-    .populate("owner")
+    .populate("owner", "name role verificationStatus status coverageAreas")
+    .sort({ rating: -1, reviewCount: -1, createdAt: -1 })
     .lean();
 }
 
@@ -808,7 +837,7 @@ export async function getSetupSuggestions(req, res, next) {
     const listing = await Listing.findById(req.params.id).lean();
     if (!listing) return res.status(404).json({ error: "Listing not found." });
 
-    const suggestions = await findSetupServicesForArea(listing.area);
+    const suggestions = await findSetupServicesForListing(listing);
     res.json({ suggestions: suggestions.map(serializeListing) });
   } catch (error) {
     next(error);
@@ -829,7 +858,7 @@ export async function getListingDetail(req, res, next) {
     serializedListing.owner = await attachProviderRating(serializedListing.owner);
     serializedListing.reviews = reviews.slice(0, 3);
 
-    const suggestions = await findSetupServicesForArea(listing.area);
+    const suggestions = await findSetupServicesForListing(listing);
     const nearby = await loadNearbyPlaces(listing);
 
     res.json({

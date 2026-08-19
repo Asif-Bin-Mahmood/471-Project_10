@@ -3,13 +3,20 @@ import Booking from "../models/Booking.js";
 import Conversation from "../models/Conversation.js";
 import Listing from "../models/Listing.js";
 import Notification from "../models/Notification.js";
-import { emitNewMessage, joinConversationParticipants } from "../realtime/socket.js";
+import { emitBookingUpdate, emitNewMessage, joinConversationParticipants } from "../realtime/socket.js";
 import { sendEmail } from "../services/email.service.js";
 import { bookingAcceptedEmail, bookingRequestEmail, newMessageEmail } from "../templates/email.templates.js";
 import { canAccessUser } from "../utils/auth.js";
 
 function isConversationParticipant(conversation, userId) {
   return conversation.participants.some((id) => String(id) === String(userId));
+}
+
+const BOOKING_RESPONSE_STATUSES = new Set(["accepted", "declined", "alternate-proposed", "completed"]);
+
+function validDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export async function getConversations(req, res, next) {
@@ -143,13 +150,27 @@ export async function createBooking(req, res, next) {
     if (String(listing.owner) === String(requester._id)) {
       return res.status(422).json({ error: "You cannot book your own listing." });
     }
+    if (listing.status !== "Available") {
+      return res.status(422).json({ error: "This listing is not currently available for booking." });
+    }
+
+    const expectedRequestType = listing.listingType === "property" ? "visit" : "service-booking";
+    if (req.body.requestType && req.body.requestType !== expectedRequestType) {
+      return res.status(422).json({ error: `This listing requires a ${expectedRequestType} request.` });
+    }
+
+    const proposedAt = validDate(req.body.proposedAt || Date.now() + 86400000);
+    if (!proposedAt || proposedAt.getTime() <= Date.now()) {
+      return res.status(422).json({ error: "Choose a valid future date and time." });
+    }
+
     const booking = await Booking.create({
       listing: listing._id,
       requester: requester._id,
       receiver: listing.owner,
-      requestType: req.body.requestType || (listing.listingType === "property" ? "visit" : "service-booking"),
-      proposedAt: req.body.proposedAt || new Date(),
-      notes: req.body.notes,
+      requestType: expectedRequestType,
+      proposedAt,
+      notes: String(req.body.notes || "").trim(),
       history: [{ status: "requested", by: requester._id }]
     });
     await Notification.create({
@@ -169,6 +190,7 @@ export async function createBooking(req, res, next) {
       metadata: { requestType: booking.requestType, listing: listing.title }
     });
     await booking.populate("listing requester receiver");
+    emitBookingUpdate(req.app.get("io"), booking, "created");
     try {
       await sendEmail({
         to: booking.receiver?.email,
@@ -198,8 +220,21 @@ export async function respondToBooking(req, res, next) {
     if (req.user.role !== "admin" && String(booking.receiver) !== String(req.user._id)) {
       return res.status(403).json({ error: "Only the listing owner or an admin can respond to this booking." });
     }
-    booking.status = req.body.status || "accepted";
-    if (req.body.alternateAt) booking.alternateAt = req.body.alternateAt;
+
+    const nextStatus = String(req.body.status || "").trim();
+    if (!BOOKING_RESPONSE_STATUSES.has(nextStatus)) {
+      return res.status(422).json({ error: "Choose accept, decline, alternate time, or complete." });
+    }
+
+    if (nextStatus === "alternate-proposed") {
+      const alternateAt = validDate(req.body.alternateAt);
+      if (!alternateAt || alternateAt.getTime() <= Date.now()) {
+        return res.status(422).json({ error: "A valid future alternate date and time is required." });
+      }
+      booking.alternateAt = alternateAt;
+    }
+
+    booking.status = nextStatus;
     booking.history.push({ status: booking.status, by: req.user._id });
     await booking.save();
     await Notification.create({
@@ -219,6 +254,7 @@ export async function respondToBooking(req, res, next) {
       metadata: { status: booking.status }
     });
     await booking.populate("listing requester receiver");
+    emitBookingUpdate(req.app.get("io"), booking, "status-changed");
     if (booking.status === "accepted") {
       try {
         await sendEmail({

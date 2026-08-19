@@ -871,6 +871,89 @@ button:disabled {
   background: white;
 }
 
+.setup-suggestion-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.detail-setup-section {
+  margin-top: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--ok-border);
+}
+
+.panel-intro {
+  margin: 6px 0 0;
+  color: var(--ok-text-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.setup-suggestion-card {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--ok-border);
+  border-radius: 14px;
+  background: #fff;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.setup-suggestion-card:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 12px 28px rgba(37, 48, 78, 0.08);
+  transform: translateY(-1px);
+}
+
+.setup-suggestion-photo {
+  width: 76px;
+  height: 76px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.setup-suggestion-copy {
+  min-width: 0;
+}
+
+.setup-suggestion-copy h4,
+.setup-suggestion-copy p {
+  margin: 0;
+}
+
+.setup-suggestion-copy h4 {
+  margin-top: 3px;
+  color: var(--ok-text);
+  font-size: 15px;
+}
+
+.setup-suggestion-copy > p {
+  margin-top: 5px;
+  color: var(--ok-text-soft);
+  font-size: 13px;
+}
+
+.booking-request-form {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 14px;
+}
+
+.booking-request-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--ok-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.booking-request-form .modal-actions {
+  margin-top: 2px;
+}
+
 .workspace-grid {
   grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.75fr);
   align-items: start;
@@ -1675,6 +1758,21 @@ button:disabled {
 
   .listing-row {
     grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .setup-suggestion-card {
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .setup-suggestion-photo {
+    width: 64px;
+    height: 64px;
+  }
+
+  .setup-suggestion-card .row-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
   .listing-thumb {

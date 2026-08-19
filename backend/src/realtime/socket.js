@@ -92,3 +92,26 @@ export function emitNewMessage(io, conversationId, message) {
     }
   });
 }
+
+export function emitBookingUpdate(io, booking, action = "updated") {
+  if (!io || !booking) return;
+
+  const payload = booking.toObject ? booking.toObject() : booking;
+  const requesterId = payload.requester?._id || payload.requester;
+  const receiverId = payload.receiver?._id || payload.receiver;
+  const rooms = [requesterId, receiverId]
+    .filter(Boolean)
+    .map((userId) => userRoom(userId));
+
+  if (!rooms.length) return;
+
+  let target = io.to(rooms[0]);
+  rooms.slice(1).forEach((room) => {
+    target = target.to(room);
+  });
+
+  target.emit("booking:updated", {
+    action,
+    booking: payload
+  });
+}

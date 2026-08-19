@@ -313,6 +313,12 @@ function shortDate(value) {
   return new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
+function dateTimeLocalValue(value = Date.now() + 86400000) {
+  const date = new Date(value);
+  const localTime = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localTime.toISOString().slice(0, 16);
+}
+
 function asList(value) {
   if (Array.isArray(value)) return value.join(", ");
   return value || "Not added";
@@ -578,6 +584,33 @@ function ListingRow({ listing, onOpen, onSave, onBook, onMessage, canEngage = fa
   );
 }
 
+function SetupSuggestionCard({ listing, onOpen, onBook, onMessage }) {
+  return (
+    <article className="setup-suggestion-card">
+      <PhotoImage listing={listing} className="setup-suggestion-photo" />
+      <div className="setup-suggestion-copy">
+        <div className="row-line">
+          <div>
+            <span className="eyebrow">{listing.category}</span>
+            <h4>{listing.owner?.name || listing.title}</h4>
+          </div>
+          <Status value={listing.status} />
+        </div>
+        <p>{listing.title}</p>
+        <div className="micro-row">
+          <span><MapPin size={13} />Covers {asList(listing.coverageAreas)}</span>
+          <span><Star size={13} fill="currentColor" />{Number(listing.rating || 0).toFixed(1)} ({Number(listing.reviewCount || 0)})</span>
+        </div>
+      </div>
+      <div className="row-actions">
+        <button type="button" className="icon-button" title="Message provider" onClick={() => onMessage(listing._id)}><Mail size={16} /></button>
+        <button type="button" className="action secondary small" onClick={() => onOpen(listing._id)}>View</button>
+        <button type="button" className="action primary small" onClick={() => onBook(listing._id)}><CalendarCheck size={15} />Book service</button>
+      </div>
+    </article>
+  );
+}
+
 // Member 2 - Module 1 & 2: one editor is reused for property and service listings.
 function ListingEditForm({ listing, busy, onCancel, onSave }) {
   const [selectedAddress, setSelectedAddress] = useState(null);
@@ -769,6 +802,7 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
   const [bookingTargetId, setBookingTargetId] = useState("");
+  const [alternateBookingId, setAlternateBookingId] = useState("");
   const [deleteTargetId, setDeleteTargetId] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -791,6 +825,7 @@ export default function App() {
   const bookingTargetListing = useMemo(
     () => listings.find((item) => item._id === bookingTargetId) ||
       favorites.find((item) => item._id === bookingTargetId) ||
+      detail?.setupSuggestions?.find((item) => item._id === bookingTargetId) ||
       (detail?.listing?._id === bookingTargetId ? detail.listing : null),
     [bookingTargetId, detail, favorites, listings]
   );
@@ -902,6 +937,8 @@ export default function App() {
     setSelectedConversationId("");
     setSelectedListingId("");
     setDetail(null);
+    setBookingTargetId("");
+    setAlternateBookingId("");
   }
 
   async function establishSession(data) {
@@ -1161,6 +1198,15 @@ export default function App() {
     const handleDisconnect = () => setSocketStatus("offline");
     const handleConnectError = () => setSocketStatus("offline");
     const handleReconnectAttempt = () => setSocketStatus("reconnecting");
+    const handleBookingUpdate = (event) => {
+      const booking = event?.booking;
+      if (!booking?._id) return;
+
+      setBookings((current) => [
+        booking,
+        ...current.filter((item) => String(item._id) !== String(booking._id))
+      ]);
+    };
     const handleMessage = (event) => {
       if (!event?.conversationId || !event?.message?._id) return;
 
@@ -1204,6 +1250,7 @@ export default function App() {
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
     socket.on("message:new", handleMessage);
+    socket.on("booking:updated", handleBookingUpdate);
     socket.io.on("reconnect_attempt", handleReconnectAttempt);
     if (socket.connected) handleConnect();
 
@@ -1212,6 +1259,7 @@ export default function App() {
       socket.off("disconnect", handleDisconnect);
       socket.off("connect_error", handleConnectError);
       socket.off("message:new", handleMessage);
+      socket.off("booking:updated", handleBookingUpdate);
       socket.io.off("reconnect_attempt", handleReconnectAttempt);
       disconnectSocket();
     };
@@ -1357,16 +1405,15 @@ export default function App() {
     }, alreadySaved ? "Removed from favorites" : "Saved to favorites");
   }
 
-  async function createBooking(id) {
+  async function createBooking(id, payload) {
     await runAction(async () => {
       await api("/bookings", {
         method: "POST",
         body: JSON.stringify({
           listingId: id,
-          requesterId: user._id,
-          requestType: "visit",
-          proposedAt: new Date(Date.now() + 86400000).toISOString(),
-          notes: "Client requested a guided visit."
+          requestType: payload.requestType,
+          proposedAt: payload.proposedAt,
+          notes: payload.notes
         })
       });
       await loadCore(user);
@@ -1378,18 +1425,34 @@ export default function App() {
     setBookingTargetId(id);
   }
 
-  async function confirmBooking() {
+  async function confirmBooking(event) {
+    event.preventDefault();
     const id = bookingTargetId;
     if (!id) return;
+    const form = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const requestType = bookingTargetListing?.listingType === "service" ? "service-booking" : "visit";
     setBookingTargetId("");
-    await createBooking(id);
+    await createBooking(id, {
+      requestType,
+      proposedAt: new Date(form.proposedAt).toISOString(),
+      notes: String(form.notes || "").trim()
+    });
   }
 
-  async function respondBooking(id, status) {
+  async function respondBooking(id, status, alternateAt) {
     await runAction(async () => {
-      await api(`/bookings/${id}/respond`, { method: "PUT", body: JSON.stringify({ status, userId: user._id }) });
+      await api(`/bookings/${id}/respond`, { method: "PUT", body: JSON.stringify({ status, alternateAt }) });
       await loadCore(user);
     }, `Booking ${status}`);
+  }
+
+  async function proposeAlternateTime(event) {
+    event.preventDefault();
+    const id = alternateBookingId;
+    if (!id) return;
+    const form = Object.fromEntries(new FormData(event.currentTarget).entries());
+    setAlternateBookingId("");
+    await respondBooking(id, "alternate-proposed", new Date(form.alternateAt).toISOString());
   }
 
   async function startConversation(id) {
@@ -1926,7 +1989,7 @@ export default function App() {
   }
 
   function renderPipeline() {
-    const grouped = ["requested", "accepted", "completed", "declined"].map((status) => ({
+    const grouped = ["requested", "alternate-proposed", "accepted", "completed", "declined"].map((status) => ({
       status,
       items: bookings.filter((booking) => booking.status === status)
     }));
@@ -1943,13 +2006,21 @@ export default function App() {
                   <div className="pipeline-copy">
                     <strong>{booking.listing?.title}</strong>
                     <p>{booking.requestType} - {shortDate(booking.proposedAt)}</p>
+                    {booking.alternateAt ? <p>Alternate: {shortDate(booking.alternateAt)}</p> : null}
                     <span>{booking.requester?.name} to {booking.receiver?.name}</span>
                   </div>
                   {role !== "business" ? (
                     <div className="row-actions">
-                      <button type="button" className="icon-button" title="Accept" onClick={() => respondBooking(booking._id, "accepted")}><CheckCircle2 size={16} /></button>
-                      <button type="button" className="icon-button" title="Complete" onClick={() => respondBooking(booking._id, "completed")}><ClipboardCheck size={16} /></button>
-                      <button type="button" className="icon-button danger" title="Decline" onClick={() => respondBooking(booking._id, "declined")}><XCircle size={16} /></button>
+                      {["requested", "alternate-proposed"].includes(booking.status) ? (
+                        <>
+                          <button type="button" className="icon-button" title="Accept" onClick={() => respondBooking(booking._id, "accepted")}><CheckCircle2 size={16} /></button>
+                          <button type="button" className="icon-button" title="Propose alternate time" onClick={() => setAlternateBookingId(booking._id)}><CalendarCheck size={16} /></button>
+                          <button type="button" className="icon-button danger" title="Decline" onClick={() => respondBooking(booking._id, "declined")}><XCircle size={16} /></button>
+                        </>
+                      ) : null}
+                      {booking.status === "accepted" ? (
+                        <button type="button" className="icon-button" title="Complete" onClick={() => respondBooking(booking._id, "completed")}><ClipboardCheck size={16} /></button>
+                      ) : null}
                     </div>
                   ) : null}
                 </article>
@@ -2058,6 +2129,24 @@ export default function App() {
                     <button type="button" className="action primary small" onClick={() => startConversation(listing._id)}><MessageSquareText size={15} />Message</button>
                   ) : null}
                 </div>
+                {role === "business" && listing.listingType === "property" ? (
+                  <section className="detail-setup-section" aria-labelledby="setup-suggestions-title">
+                    <div className="panel-head">
+                      <div>
+                        <span className="eyebrow">Smart setup</span>
+                        <h3 id="setup-suggestions-title">Suggested Service Providers</h3>
+                      </div>
+                      <Pill tone="neutral">{detail?.setupSuggestions?.length || 0}</Pill>
+                    </div>
+                    <p className="panel-intro">Verified providers matched from stored service category and coverage area data.</p>
+                    <div className="setup-suggestion-list">
+                      {(detail?.setupSuggestions || []).map((item) => (
+                        <SetupSuggestionCard key={item._id} listing={item} onOpen={openListing} onBook={requestBooking} onMessage={startConversation} />
+                      ))}
+                      {!(detail?.setupSuggestions || []).length ? <Empty title="No verified setup providers cover this area yet" /> : null}
+                    </div>
+                  </section>
+                ) : null}
               </>
             ) : <Empty title="No listing selected" />}
             </div>
@@ -2088,12 +2177,6 @@ export default function App() {
               ))}
               {!(detail?.nearbyPlaces || []).length ? <Empty title="No nearby places found" /> : null}
             </div>
-              </div>
-              <div className="panel">
-            <div className="panel-head"><h3>Setup Suggestions</h3><Pill tone="neutral">{detail?.setupSuggestions?.length || 0}</Pill></div>
-            {(detail?.setupSuggestions || []).map((item) => (
-              <ListingRow key={item._id} listing={item} onOpen={openListing} onSave={saveFavorite} onBook={requestBooking} onMessage={startConversation} canEngage={role === "business"} />
-            ))}
               </div>
             </>
           ) : null}
@@ -2474,17 +2557,40 @@ export default function App() {
             <IconFrame icon={CalendarCheck} tone="green" />
             <div>
               <span className="eyebrow">Booking request</span>
-              <h3 id="booking-modal-title">Request a guided visit?</h3>
-              <p>Send a visit request for <strong>{bookingTargetListing?.title || "this listing"}</strong>. The proposed time will be tomorrow and the owner can accept or suggest an alternative.</p>
+              <h3 id="booking-modal-title">{bookingTargetListing?.listingType === "service" ? "Request this service?" : "Request a guided visit?"}</h3>
+              <p>Send a {bookingTargetListing?.listingType === "service" ? "service booking" : "property visit"} request for <strong>{bookingTargetListing?.title || "this listing"}</strong>. The provider can accept, decline, or suggest an alternative.</p>
             </div>
             <div className="booking-summary">
               <span><MapPin size={15} />{bookingTargetListing?.area || "Dhaka"}</span>
               <strong>{money(bookingTargetListing?.price)}</strong>
             </div>
-            <div className="modal-actions">
-              <button className="action secondary" type="button" onClick={() => setBookingTargetId("")}>Cancel</button>
-              <button className="action primary" type="button" onClick={confirmBooking}><CalendarCheck size={16} />Request visit</button>
+            <form className="booking-request-form" onSubmit={confirmBooking}>
+              <label>Proposed date and time<input name="proposedAt" type="datetime-local" min={dateTimeLocalValue(Date.now() + 300000)} defaultValue={dateTimeLocalValue()} required /></label>
+              <label>Notes (optional)<textarea name="notes" rows="3" placeholder="Share access, timing, or setup requirements." /></label>
+              <div className="modal-actions">
+                <button className="action secondary" type="button" onClick={() => setBookingTargetId("")}>Cancel</button>
+                <button className="action primary" type="submit"><CalendarCheck size={16} />{bookingTargetListing?.listingType === "service" ? "Request service" : "Request visit"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {alternateBookingId && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setAlternateBookingId("")}>
+          <div className="confirm-modal booking-modal" role="dialog" aria-modal="true" aria-labelledby="alternate-booking-title" onClick={(event) => event.stopPropagation()}>
+            <IconFrame icon={CalendarCheck} tone="blue" />
+            <div>
+              <span className="eyebrow">Alternate schedule</span>
+              <h3 id="alternate-booking-title">Propose another time</h3>
+              <p>The requester will see this updated schedule immediately in their booking pipeline.</p>
             </div>
+            <form className="booking-request-form" onSubmit={proposeAlternateTime}>
+              <label>Alternate date and time<input name="alternateAt" type="datetime-local" min={dateTimeLocalValue(Date.now() + 300000)} defaultValue={dateTimeLocalValue()} required /></label>
+              <div className="modal-actions">
+                <button className="action secondary" type="button" onClick={() => setAlternateBookingId("")}>Cancel</button>
+                <button className="action primary" type="submit"><CalendarCheck size={16} />Send alternate time</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
