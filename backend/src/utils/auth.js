@@ -2,7 +2,9 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
 export function getJwtSecret() {
-  return process.env.JWT_SECRET || "officekhoj_cse471_secret";
+  const secret = String(process.env.JWT_SECRET || "").trim();
+  if (!secret) throw new Error("JWT_SECRET is required.");
+  return secret;
 }
 
 export function signToken(user) {

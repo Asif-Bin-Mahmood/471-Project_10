@@ -192,7 +192,7 @@ export default function ListingMap({ listings = [], searchLocation = null }) {
       </div>
 
       <div className="map-source-note">
-        Map data & search: OpenStreetMap / Nominatim
+        Interactive location map
       </div>
 
       {skippedCount > 0 && (

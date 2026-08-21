@@ -97,7 +97,9 @@ export async function uploadListingPhoto({
   const bucket = getStorage(app).bucket(bucketName);
 
   const ownerFolder = safeFileName(ownerId);
-  const typeFolder = listingType === "service" ? "service-portfolios" : "property-photos";
+  const typeFolder = listingType === "profile"
+    ? "profile-photos"
+    : listingType === "service" ? "service-portfolios" : "property-photos";
   const objectName = `${Date.now()}-${crypto.randomUUID()}-${safeFileName(originalName)}`;
   const objectPath = `officekhoj/${typeFolder}/${ownerFolder}/${objectName}`;
   const file = bucket.file(objectPath);

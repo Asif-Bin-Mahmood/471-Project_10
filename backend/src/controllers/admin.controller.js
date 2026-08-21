@@ -7,12 +7,15 @@ import Report from "../models/Report.js";
 import Review from "../models/Review.js";
 import SupportTicket from "../models/SupportTicket.js";
 import User from "../models/User.js";
+import { attachReportTargets } from "./report.controller.js";
 
 export async function getDashboard(req, res, next) {
   try {
     const [
       users,
       activeListings,
+      activeProperties,
+      activeServices,
       totalListings,
       properties,
       services,
@@ -32,6 +35,8 @@ export async function getDashboard(req, res, next) {
     ] = await Promise.all([
       User.countDocuments(),
       Listing.countDocuments({ status: "Available", verificationStatus: "verified" }),
+      Listing.countDocuments({ listingType: "property", status: "Available", verificationStatus: "verified" }),
+      Listing.countDocuments({ listingType: "service", status: "Available", verificationStatus: "verified" }),
       Listing.countDocuments(),
       Listing.countDocuments({ listingType: "property" }),
       Listing.countDocuments({ listingType: "service" }),
@@ -58,6 +63,8 @@ export async function getDashboard(req, res, next) {
       app: "OfficeKhoj BD",
       users,
       activeListings,
+      activeProperties,
+      activeServices,
       totalListings,
       properties,
       services,
@@ -113,11 +120,15 @@ export async function getDashboard(req, res, next) {
 
 export async function getVerifications(req, res, next) {
   try {
-    const [pendingUsers, pendingListings, reports] = await Promise.all([
+    const [pendingUsers, pendingListings, reportDocuments] = await Promise.all([
       User.find({ verificationStatus: "pending" }),
       Listing.find({ verificationStatus: "pending" }).populate("owner"),
       Report.find({ status: "open" })
+        .populate("reporter", "name email role")
+        .populate("resolvedBy", "name email role")
+        .sort({ createdAt: -1 })
     ]);
+    const reports = await attachReportTargets(reportDocuments);
     res.json({ pendingUsers, pendingListings, reports });
   } catch (error) {
     next(error);
@@ -126,10 +137,14 @@ export async function getVerifications(req, res, next) {
 
 export async function verifyUser(req, res, next) {
   try {
+    const status = String(req.body.status || "verified").trim();
+    if (!["verified", "rejected"].includes(status)) {
+      return res.status(422).json({ error: "Verification status must be verified or rejected." });
+    }
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { verificationStatus: req.body.status || "verified" },
-      { new: true }
+      { verificationStatus: status },
+      { new: true, runValidators: true }
     );
     if (!user) return res.status(404).json({ error: "User not found." });
     res.json({ user });
@@ -140,9 +155,44 @@ export async function verifyUser(req, res, next) {
 
 export async function moderateListing(req, res, next) {
   try {
-    const listing = await Listing.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate("owner");
+    const verificationStatus = String(req.body.verificationStatus || "").trim();
+    if (!["pending", "verified", "rejected"].includes(verificationStatus)) {
+      return res.status(422).json({ error: "Choose a valid listing verification status." });
+    }
+    const listing = await Listing.findByIdAndUpdate(
+      req.params.id,
+      { verificationStatus },
+      { new: true, runValidators: true }
+    ).populate("owner");
     if (!listing) return res.status(404).json({ error: "Listing not found." });
     res.json({ listing });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getAdminInventory(req, res, next) {
+  try {
+    const filter = {};
+    if (["property", "service"].includes(req.query.type)) filter.listingType = req.query.type;
+    if (["pending", "verified", "rejected"].includes(req.query.verificationStatus)) {
+      filter.verificationStatus = req.query.verificationStatus;
+    }
+    if (["Available", "Busy", "Leased"].includes(req.query.status)) filter.status = req.query.status;
+
+    const listings = await Listing.find(filter)
+      .populate("owner", "name email role verificationStatus status")
+      .sort({ createdAt: -1 })
+      .lean();
+    const summary = listings.reduce((result, listing) => {
+      result.total += 1;
+      result[listing.listingType] += 1;
+      result[listing.verificationStatus] += 1;
+      if (listing.status !== "Available") result.unavailable += 1;
+      return result;
+    }, { total: 0, property: 0, service: 0, pending: 0, verified: 0, rejected: 0, unavailable: 0 });
+
+    res.json({ results: listings, summary });
   } catch (error) {
     next(error);
   }

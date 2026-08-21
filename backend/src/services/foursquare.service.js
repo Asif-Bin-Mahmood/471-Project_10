@@ -6,10 +6,10 @@ const DEFAULT_TIMEOUT_MS = 5000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 const PLACE_SEARCHES = [
-  { category: "Bank", query: "bank" },
   { category: "Restaurant", query: "restaurant" },
+  { category: "Café", query: "cafe" },
   { category: "Hospital", query: "hospital" },
-  { category: "Public transport", query: "public transport" }
+  { category: "ATM", query: "ATM" }
 ];
 
 const cache = new Map();

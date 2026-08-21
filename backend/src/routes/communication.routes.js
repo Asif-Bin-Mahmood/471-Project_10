@@ -8,7 +8,8 @@ import {
   getMessages,
   getNotifications,
   markNotificationRead,
-  respondToBooking
+  respondToBooking,
+  uploadMessageAttachment
 } from "../controllers/communication.controller.js";
 import { requireAuth, requireRole, requireSelfOrAdmin } from "../utils/auth.js";
 
@@ -18,6 +19,15 @@ router.get("/conversations/:userId", requireAuth, requireSelfOrAdmin("userId"), 
 router.post("/conversations", requireAuth, requireRole("business-owner"), createConversation);
 router.get("/messages/:conversationId", requireAuth, getMessages);
 router.post("/messages", requireAuth, createMessage);
+router.post(
+  "/uploads/message-attachment",
+  requireAuth,
+  express.raw({
+    type: ["image/jpeg", "image/png", "image/webp", "audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav"],
+    limit: "12mb"
+  }),
+  uploadMessageAttachment
+);
 router.get("/bookings/:userId", requireAuth, requireSelfOrAdmin("userId"), getBookings);
 router.post("/bookings", requireAuth, requireRole("business-owner"), createBooking);
 router.put("/bookings/:id/respond", requireAuth, respondToBooking);

@@ -25,4 +25,6 @@ const bookingSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+bookingSchema.index({ listing: 1, requester: 1, proposedAt: 1 }, { unique: true });
+
 export default mongoose.model("Booking", bookingSchema);

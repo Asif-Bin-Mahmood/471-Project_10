@@ -58,8 +58,22 @@ export function serializeListing(listing) {
   if (!listing) return null;
 
   const item = listing.toObject ? listing.toObject() : listing;
+  const owner = item.owner && typeof item.owner === "object" && (item.owner.name || item.owner.role)
+    ? {
+        _id: item.owner._id,
+        name: item.owner.name,
+        role: item.owner.role,
+        status: item.owner.status,
+        verificationStatus: item.owner.verificationStatus,
+        coverageAreas: item.owner.coverageAreas,
+        averageRating: item.owner.averageRating,
+        reviewCount: item.owner.reviewCount,
+        ratingSummary: item.owner.ratingSummary
+      }
+    : item.owner;
   return {
     ...item,
+    owner,
     ...locationMetric(item),
     imageTone: item.category ? item.category.toLowerCase() : "office"
   };

@@ -44,6 +44,7 @@ async function databaseCounts() {
 
 export async function getOperationsSummary(req, res, next) {
   try {
+    const isAdmin = req.user.role === "admin";
     const [
       collections,
       areaDemand,
@@ -58,18 +59,24 @@ export async function getOperationsSummary(req, res, next) {
       availableServices,
       unreadNotifications
     ] = await Promise.all([
-      mongoose.connection.db.listCollections().toArray(),
+      isAdmin ? mongoose.connection.db.listCollections().toArray() : Promise.resolve([]),
       Listing.aggregate([{ $group: { _id: "$area", count: { $sum: 1 }, avgPrice: { $avg: "$price" } } }, { $sort: { count: -1, avgPrice: -1 } }]),
       Listing.aggregate([{ $group: { _id: "$category", count: { $sum: 1 }, avgPrice: { $avg: "$price" } } }, { $sort: { count: -1 } }]),
-      Booking.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
-      SupportTicket.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
-      ActivityLog.find().sort({ createdAt: -1 }).limit(8).populate("actor", "name role").lean(),
-      SupportTicket.find().sort({ updatedAt: -1 }).limit(6).populate("requester assignedTo", "name role").lean(),
-      SystemSetting.find().sort({ category: 1, key: 1 }).populate("updatedBy", "name").lean(),
-      databaseCounts(),
+      Booking.aggregate([
+        ...(!isAdmin ? [{ $match: { $or: [{ requester: req.user._id }, { receiver: req.user._id }] } }] : []),
+        { $group: { _id: "$status", count: { $sum: 1 } } }
+      ]),
+      SupportTicket.aggregate([
+        ...(!isAdmin ? [{ $match: { requester: req.user._id } }] : []),
+        { $group: { _id: "$status", count: { $sum: 1 } } }
+      ]),
+      isAdmin ? ActivityLog.find().sort({ createdAt: -1 }).limit(8).populate("actor", "name role").lean() : Promise.resolve([]),
+      SupportTicket.find(isAdmin ? {} : { requester: req.user._id }).sort({ updatedAt: -1 }).limit(6).populate("requester assignedTo", "name role").lean(),
+      SystemSetting.find(isAdmin ? {} : { key: "customer_service_phone" }).sort({ category: 1, key: 1 }).populate("updatedBy", "name").lean(),
+      isAdmin ? databaseCounts() : Promise.resolve([]),
       Listing.countDocuments({ listingType: "property", status: "Available", verificationStatus: "verified" }),
       Listing.countDocuments({ listingType: "service", status: "Available", verificationStatus: "verified" }),
-      Notification.countDocuments({ read: false })
+      Notification.countDocuments({ ...(isAdmin ? {} : { user: req.user._id }), read: false })
     ]);
 
     const totalDocuments = dbCounts.reduce((sum, item) => sum + item.count, 0);
@@ -78,11 +85,13 @@ export async function getOperationsSummary(req, res, next) {
 
     res.json({
       database: {
-        status: mongoose.connection.readyState === 1 ? "connected" : "not-ready",
-        name: mongoose.connection.name,
-        collections: collections.length,
-        totalDocuments,
-        counts: dbCounts
+        status: mongoose.connection.readyState === 1 ? "ready" : "unavailable",
+        ...(isAdmin ? {
+          name: mongoose.connection.name,
+          collections: collections.length,
+          totalDocuments,
+          counts: dbCounts
+        } : {})
       },
       operations: {
         activeProperties,
@@ -90,7 +99,7 @@ export async function getOperationsSummary(req, res, next) {
         unreadNotifications,
         conversionRate: pipeline.accepted && pipeline.requested ? Math.round((pipeline.accepted / (pipeline.accepted + pipeline.requested)) * 100) : 100,
         openTickets: ticketStatus.open || 0,
-        reviewQueue: await Report.countDocuments({ status: "open" })
+        reviewQueue: isAdmin ? await Report.countDocuments({ status: "open" }) : 0
       },
       areaDemand: areaDemand.map((item) => ({ area: item._id, count: item.count, avgPrice: money(item.avgPrice) })),
       categoryMix: categoryMix.map((item) => ({ category: item._id, count: item.count, avgPrice: money(item.avgPrice) })),
@@ -98,7 +107,9 @@ export async function getOperationsSummary(req, res, next) {
       ticketPipeline: ticketPipeline.map((item) => ({ status: item._id, count: item.count })),
       recentActivity,
       tickets,
-      settings
+      settings: isAdmin
+        ? settings
+        : settings.map(({ key, label, value }) => ({ key, label, value }))
     });
   } catch (error) {
     next(error);

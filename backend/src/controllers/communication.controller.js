@@ -3,7 +3,8 @@ import Booking from "../models/Booking.js";
 import Conversation from "../models/Conversation.js";
 import Listing from "../models/Listing.js";
 import Notification from "../models/Notification.js";
-import { emitBookingUpdate, emitNewMessage, joinConversationParticipants } from "../realtime/socket.js";
+import { emitBookingUpdate, emitMessagesRead, emitNewMessage, joinConversationParticipants } from "../realtime/socket.js";
+import { uploadCloudinaryMessageAttachment } from "../services/cloudinaryStorage.service.js";
 import { sendEmail } from "../services/email.service.js";
 import { bookingAcceptedEmail, bookingRequestEmail, newMessageEmail } from "../templates/email.templates.js";
 import { canAccessUser } from "../utils/auth.js";
@@ -17,6 +18,29 @@ const BOOKING_RESPONSE_STATUSES = new Set(["accepted", "declined", "alternate-pr
 function validDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function decodedFileName(headerValue) {
+  if (!headerValue) return "attachment";
+  try {
+    return decodeURIComponent(headerValue);
+  } catch {
+    return String(headerValue);
+  }
+}
+
+function safeAttachmentUrl(value, kind) {
+  try {
+    const url = new URL(String(value || ""));
+    const cloudName = String(process.env.CLOUDINARY_CLOUD_NAME || "").trim().toLowerCase();
+    const expectedFolder = `/officekhoj/message-${kind}/`;
+    const belongsToProject = url.pathname.toLowerCase().startsWith(`/${cloudName}/`) && url.pathname.includes(expectedFolder);
+    return url.protocol === "https:" && url.hostname === "res.cloudinary.com" && cloudName && belongsToProject
+      ? url.toString()
+      : "";
+  } catch {
+    return "";
+  }
 }
 
 export async function getConversations(req, res, next) {
@@ -65,7 +89,44 @@ export async function getMessages(req, res, next) {
     if (req.user.role !== "admin" && !isConversationParticipant(conversation, req.user._id)) {
       return res.status(403).json({ error: "You can only read messages from your own conversations." });
     }
+    const newlyRead = [];
+    for (const message of conversation.messages) {
+      const senderId = message.sender?._id || message.sender;
+      const alreadyRead = (message.readBy || []).some((reader) => String(reader) === String(req.user._id));
+      if (String(senderId) !== String(req.user._id) && !alreadyRead) {
+        message.readBy.addToSet(req.user._id);
+        newlyRead.push(message._id);
+      }
+    }
+    if (newlyRead.length) {
+      await conversation.save();
+      emitMessagesRead(req.app.get("io"), conversation._id, newlyRead, req.user._id);
+    }
     res.json({ messages: conversation.messages });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function uploadMessageAttachment(req, res, next) {
+  try {
+    const kind = String(req.get("x-attachment-kind") || "").trim().toLowerCase();
+    if (!["image", "audio"].includes(kind)) {
+      return res.status(422).json({ error: "Attachment type must be image or audio." });
+    }
+    const conversation = await Conversation.findById(req.get("x-conversation-id")).select("participants");
+    if (!conversation) return res.status(404).json({ error: "Conversation not found." });
+    if (req.user.role !== "admin" && !isConversationParticipant(conversation, req.user._id)) {
+      return res.status(403).json({ error: "You can only upload attachments to your own conversations." });
+    }
+    const attachment = await uploadCloudinaryMessageAttachment({
+      buffer: req.body,
+      contentType: String(req.get("content-type") || "").split(";")[0].trim().toLowerCase(),
+      originalName: decodedFileName(req.get("x-file-name")),
+      ownerId: req.user._id,
+      kind
+    });
+    res.status(201).json({ attachment });
   } catch (error) {
     next(error);
   }
@@ -79,10 +140,21 @@ export async function createMessage(req, res, next) {
       return res.status(403).json({ error: "You can only send messages in your own conversations." });
     }
     const body = String(req.body.message || req.body.body || "").trim();
-    if (body.length < 1) return res.status(422).json({ error: "Message body is required." });
+    const requestedKind = String(req.body.kind || "text").trim().toLowerCase();
+    const kind = ["image", "audio"].includes(requestedKind) ? requestedKind : "text";
+    const attachmentUrl = safeAttachmentUrl(req.body.attachmentUrl, kind);
+    if (!body && !attachmentUrl) return res.status(422).json({ error: "Write a message or attach a file." });
+    if (kind !== "text" && !attachmentUrl) return res.status(422).json({ error: "Upload the attachment before sending." });
+    if (body.length > 4000) return res.status(422).json({ error: "Messages can contain up to 4,000 characters." });
     conversation.messages.push({
       sender: req.user._id,
       body,
+      kind: attachmentUrl ? kind : "text",
+      attachmentUrl,
+      attachmentName: attachmentUrl ? String(req.body.attachmentName || "").trim().slice(0, 180) : "",
+      attachmentMimeType: attachmentUrl ? String(req.body.attachmentMimeType || "").trim().slice(0, 100) : "",
+      attachmentSize: attachmentUrl ? Math.max(0, Number(req.body.attachmentSize) || 0) : 0,
+      durationSeconds: kind === "audio" ? Math.min(600, Math.max(0, Number(req.body.durationSeconds) || 0)) : 0,
       readBy: [req.user._id]
     });
     await conversation.save();
@@ -93,7 +165,7 @@ export async function createMessage(req, res, next) {
           user,
           type: "message",
           title: "New message",
-          message: body,
+          message: body || (kind === "image" ? "Sent an image." : "Sent a voice message."),
           channel: "email"
         }))
     );
@@ -116,7 +188,7 @@ export async function createMessage(req, res, next) {
             recipientName: recipient.name,
             senderName: req.user.name,
             conversationSubject: conversation.subject,
-            body
+            body: body || (kind === "image" ? "Sent an image." : "Sent a voice message.")
           }),
           event: "inquiry.message"
         });
@@ -159,9 +231,23 @@ export async function createBooking(req, res, next) {
       return res.status(422).json({ error: `This listing requires a ${expectedRequestType} request.` });
     }
 
-    const proposedAt = validDate(req.body.proposedAt || Date.now() + 86400000);
+    if (!req.body.proposedAt) {
+      return res.status(422).json({ error: "A proposed date and time is required." });
+    }
+    const proposedAt = validDate(req.body.proposedAt);
     if (!proposedAt || proposedAt.getTime() <= Date.now()) {
       return res.status(422).json({ error: "Choose a valid future date and time." });
+    }
+
+    const activeBooking = await Booking.findOne({
+      listing: listing._id,
+      requester: requester._id,
+      status: { $in: ["requested", "accepted", "alternate-proposed"] }
+    }).select("_id status");
+    if (activeBooking) {
+      return res.status(409).json({
+        error: "You already have an active request for this listing. Wait for it to be completed or declined before booking again."
+      });
     }
 
     const booking = await Booking.create({
@@ -224,6 +310,19 @@ export async function respondToBooking(req, res, next) {
     const nextStatus = String(req.body.status || "").trim();
     if (!BOOKING_RESPONSE_STATUSES.has(nextStatus)) {
       return res.status(422).json({ error: "Choose accept, decline, alternate time, or complete." });
+    }
+
+    const allowedTransitions = {
+      requested: new Set(["accepted", "declined", "alternate-proposed"]),
+      "alternate-proposed": new Set(["accepted", "declined", "alternate-proposed"]),
+      accepted: new Set(["completed", "declined", "alternate-proposed"]),
+      declined: new Set(),
+      completed: new Set()
+    };
+    if (!allowedTransitions[booking.status]?.has(nextStatus)) {
+      return res.status(409).json({
+        error: `A ${booking.status} booking cannot be changed to ${nextStatus}.`
+      });
     }
 
     if (nextStatus === "alternate-proposed") {

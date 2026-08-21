@@ -49,7 +49,7 @@ let users = [
   {
     id: "user-001",
     name: "M A OBAEED",
-    email: "obaeed@officekhoj.bd",
+    email: "asifnzs118+officekhoj.business@gmail.com",
     phone: "01700001382",
     password: "demo123",
     token: "token-business-owner",
@@ -67,7 +67,7 @@ let users = [
   {
     id: "user-002",
     name: "Nusrat Property Holdings",
-    email: "owner@officekhoj.bd",
+    email: "asifnzs118+officekhoj.property@gmail.com",
     phone: "01711001100",
     password: "demo123",
     token: "token-property-owner",
@@ -81,7 +81,7 @@ let users = [
   {
     id: "user-003",
     name: "FitOut Studio BD",
-    email: "interior@officekhoj.bd",
+    email: "asifnzs118+officekhoj.service@gmail.com",
     phone: "01722002200",
     password: "demo123",
     token: "token-service-provider",
@@ -96,7 +96,7 @@ let users = [
   {
     id: "user-004",
     name: "OfficeKhoj Admin",
-    email: "admin@officekhoj.bd",
+    email: "asifnzs118+officekhoj.admin@gmail.com",
     phone: "01733003300",
     password: "admin123",
     token: "token-admin",
@@ -353,7 +353,7 @@ let notifications = [
 let emailLogs = [
   {
     id: "email001",
-    to: "obaeed@officekhoj.bd",
+    to: "asifnzs118+officekhoj.business@gmail.com",
     event: "booking-confirmation",
     subject: "OfficeKhoj BD booking confirmation",
     status: "queued",

@@ -4,5 +4,10 @@ export function notFound(req, res) {
 
 export function errorHandler(error, req, res, next) {
   console.error(error);
-  res.status(error.status || 500).json({ error: error.message || "Server error." });
+  if (error?.code === 11000) {
+    return res.status(409).json({ error: "This request has already been submitted." });
+  }
+  const status = Number(error?.status) || 500;
+  const message = status >= 500 ? "The server could not complete this request." : error.message;
+  res.status(status).json({ error: message || "The request could not be completed." });
 }

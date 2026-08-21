@@ -2,7 +2,7 @@ export const seedUsers = [
   {
     key: "business",
     name: "M A OBAEED",
-    email: "obaeed@officekhoj.bd",
+    email: "asifnzs118+officekhoj.business@gmail.com",
     phone: "01700001382",
     password: "demo123",
     role: "business-owner",
@@ -17,7 +17,7 @@ export const seedUsers = [
   {
     key: "property",
     name: "Nusrat Property Holdings",
-    email: "owner@officekhoj.bd",
+    email: "asifnzs118+officekhoj.property@gmail.com",
     phone: "01711001100",
     password: "demo123",
     role: "property-owner",
@@ -28,7 +28,7 @@ export const seedUsers = [
   {
     key: "service",
     name: "FitOut Studio BD",
-    email: "interior@officekhoj.bd",
+    email: "asifnzs118+officekhoj.service@gmail.com",
     phone: "01722002200",
     password: "demo123",
     role: "service-provider",
@@ -39,7 +39,7 @@ export const seedUsers = [
   {
     key: "admin",
     name: "OfficeKhoj Admin",
-    email: "admin@officekhoj.bd",
+    email: "asifnzs118+officekhoj.admin@gmail.com",
     phone: "01733003300",
     password: "admin123",
     role: "admin",
@@ -65,7 +65,15 @@ export const addressSuggestions = [
   { id: "addr-gulshan-avenue", label: "Gulshan Avenue, Dhaka", area: "Gulshan", lat: 23.7898, lng: 90.4193 },
   { id: "addr-motijheel", label: "Motijheel Commercial Area, Dhaka", area: "Motijheel", lat: 23.7337, lng: 90.4175 },
   { id: "addr-dhanmondi-27", label: "Dhanmondi 27, Dhaka", area: "Dhanmondi", lat: 23.755, lng: 90.3751 },
-  { id: "addr-uttara-sector-7", label: "Uttara Sector 7, Dhaka", area: "Uttara", lat: 23.8759, lng: 90.3992 }
+  { id: "addr-uttara-sector-7", label: "Uttara Sector 7, Dhaka", area: "Uttara", lat: 23.8759, lng: 90.3992 },
+  { id: "addr-mirpur-10", label: "Mirpur 10, Dhaka", area: "Mirpur", lat: 23.8069, lng: 90.3687 },
+  { id: "addr-mohammadpur", label: "Town Hall, Mohammadpur, Dhaka", area: "Mohammadpur", lat: 23.7581, lng: 90.3584 },
+  { id: "addr-tejgaon", label: "Tejgaon Industrial Area, Dhaka", area: "Tejgaon", lat: 23.7638, lng: 90.3997 },
+  { id: "addr-bashundhara", label: "Bashundhara Residential Area, Dhaka", area: "Bashundhara", lat: 23.8151, lng: 90.4255 },
+  { id: "addr-badda", label: "Middle Badda, Dhaka", area: "Badda", lat: 23.7804, lng: 90.4258 },
+  { id: "addr-rampura", label: "Rampura, Dhaka", area: "Rampura", lat: 23.7612, lng: 90.4208 },
+  { id: "addr-farmgate", label: "Farmgate, Dhaka", area: "Farmgate", lat: 23.7579, lng: 90.3895 },
+  { id: "addr-paltan", label: "Paltan, Dhaka", area: "Paltan", lat: 23.7368, lng: 90.4106 }
 ];
 
 export const landmarkData = [

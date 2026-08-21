@@ -23,6 +23,7 @@ const userSchema = new mongoose.Schema(
     minSize: { type: Number, default: 0 },
     serviceNeed: { type: String, default: "" },
     coverageAreas: [{ type: String }],
+    profilePhotoUrl: { type: String, default: "", trim: true },
     savedListings: [{ type: mongoose.Schema.Types.ObjectId, ref: "Listing" }]
   },
   { timestamps: true }

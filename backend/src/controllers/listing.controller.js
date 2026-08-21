@@ -181,11 +181,15 @@ async function resolveSearchLocation(area) {
 }
 
 function buildLocationFilter(area, searchLocation) {
-  const rawTerms = [
-    String(area || "").trim(),
-    String(area || "").split(",")[0]?.trim(),
-    String(searchLocation?.area || "").trim()
-  ].filter(Boolean);
+  const requestedArea = String(area || "").trim();
+  const requestedLocality = requestedArea.split(",")[0]?.trim();
+  const resolvedArea = String(searchLocation?.area || "").trim();
+  const genericDhakaTerms = new Set(["dhaka", "dhaka city", "dhaka district", "dhaka division"]);
+  const includeResolvedArea = resolvedArea && (
+    !genericDhakaTerms.has(resolvedArea.toLowerCase()) ||
+    genericDhakaTerms.has(requestedLocality.toLowerCase())
+  );
+  const rawTerms = [requestedArea, requestedLocality, includeResolvedArea ? resolvedArea : ""].filter(Boolean);
 
   // Remove duplicate area names, e.g. "Banani" and "banani".
   const seen = new Set();

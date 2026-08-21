@@ -9,10 +9,10 @@ import {
 } from "lucide-react";
 
 const DEMO_ACCOUNTS = [
-  { role: "Business Owner", email: "obaeed@officekhoj.bd", password: "demo123", icon: BriefcaseBusiness },
-  { role: "Property Owner", email: "owner@officekhoj.bd", password: "demo123", icon: Building2 },
-  { role: "Service Provider", email: "interior@officekhoj.bd", password: "demo123", icon: Wrench },
-  { role: "Admin", email: "admin@officekhoj.bd", password: "admin123", icon: ShieldCheck }
+  { role: "Business Owner", email: "asifnzs118+officekhoj.business@gmail.com", password: "demo123", icon: BriefcaseBusiness },
+  { role: "Property Owner", email: "asifnzs118+officekhoj.property@gmail.com", password: "demo123", icon: Building2 },
+  { role: "Service Provider", email: "asifnzs118+officekhoj.service@gmail.com", password: "demo123", icon: Wrench },
+  { role: "Admin", email: "asifnzs118+officekhoj.admin@gmail.com", password: "admin123", icon: ShieldCheck }
 ];
 
 const REGISTRATION_ROLES = [
@@ -83,7 +83,7 @@ export default function AuthPage({ busy, error, onClearError, onLogin, onRegiste
             <div className="auth-card-head">
               <span className="eyebrow">Welcome back</span>
               <h2>Sign in to your workspace</h2>
-              <p>Your JWT session will remain available after a page refresh.</p>
+              <p>Your secure session stays signed in after a page refresh.</p>
             </div>
             <form className="auth-form" onSubmit={submitLogin}>
               <label>Email<input name="email" type="email" autoComplete="email" required /></label>
@@ -96,9 +96,9 @@ export default function AuthPage({ busy, error, onClearError, onLogin, onRegiste
               <div className="auth-divider"><span>Showcase demo accounts</span></div>
               <div className="demo-login-grid">
                 {DEMO_ACCOUNTS.map(({ role, email, password, icon: Icon }) => (
-                  <button type="button" key={email} disabled={busy} onClick={() => onLogin({ email, password })}>
+                  <button type="button" key={email} disabled={busy} onClick={() => onLogin({ email, password })} aria-label={`Open ${role} demo workspace`}>
                     <Icon size={16} />
-                    <span><strong>{role}</strong><small>{email}</small></span>
+                    <span><strong>{role}</strong><small>One-click showcase access</small></span>
                   </button>
                 ))}
               </div>

@@ -70,7 +70,7 @@ export default function PhotoUploadField({
       />
       <p className="editor-help">JPEG, PNG or WebP. Maximum 6 photos, 8 MB each.</p>
 
-      {uploading ? <p className="photo-upload-status">Uploading to Firebase Storage...</p> : null}
+      {uploading ? <p className="photo-upload-status">Uploading photo securely...</p> : null}
       {error ? <p className="photo-upload-error">{error}</p> : null}
 
       {urls.length ? (

@@ -51,3 +51,24 @@ export async function uploadListingPhotos(files, listingType, existingCount = 0)
   }
   return uploaded;
 }
+
+export async function uploadProfilePhoto(file, userId) {
+  validateFile(file);
+
+  const token = getAuthToken();
+  if (!token) throw new Error("Please sign in before uploading a profile photo.");
+
+  const response = await fetch(`${API_BASE}/profile/${encodeURIComponent(userId)}/photo`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": file.type,
+      "X-File-Name": encodeURIComponent(file.name)
+    },
+    body: file
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || `Profile photo upload failed: ${response.status}`);
+  return data;
+}

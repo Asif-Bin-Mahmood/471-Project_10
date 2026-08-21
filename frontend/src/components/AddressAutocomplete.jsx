@@ -164,7 +164,7 @@ export default function AddressAutocomplete({
         </div>
       </label>
       {status === "short" && <p className="address-help">Enter at least 3 characters.</p>}
-      {(status === "debouncing" || status === "loading") && <p className="address-help">Searching Mapbox...</p>}
+      {(status === "debouncing" || status === "loading") && <p className="address-help">Finding matching addresses...</p>}
       {status === "no-results" && <p className="address-help">No matching addresses found.</p>}
       {status === "error" && <p className="address-help error">{error}</p>}
       {selected && (

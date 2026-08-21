@@ -6,6 +6,7 @@ import {
   BriefcaseBusiness,
   Building2,
   CalendarCheck,
+  Camera,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -13,8 +14,10 @@ import {
   CircleDollarSign,
   ClipboardCheck,
   Compass,
-  Database,
   Gauge,
+  Eye,
+  EyeOff,
+  Flag,
   Heart,
   LayoutDashboard,
   LifeBuoy,
@@ -43,9 +46,12 @@ import { api, getAuthToken, setAuthToken } from "./api/client.js";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 import AuthPage from "./components/AuthPage.jsx";
 import { MessagesPage, NotificationsPage } from "./components/Communications.jsx";
+import FacilitiesPicker from "./components/FacilitiesPicker.jsx";
 import ListingMap from "./components/ListingMap.jsx";
 import PhotoUploadField from "./components/PhotoUploadField.jsx";
+import ProfilePreferences from "./components/ProfilePreferences.jsx";
 import { connectSocket, disconnectSocket, getSocket } from "./realtime/socket.js";
+import { uploadProfilePhoto } from "./services/photoUpload.js";
 
 const roles = [
   { key: "business", label: "Business", icon: BriefcaseBusiness },
@@ -69,10 +75,10 @@ const roleKeyByUserRole = {
 };
 
 const roleViewAccess = {
-  business: new Set(["dashboard", "marketplace", "pipeline", "messages", "notifications", "workspace", "support"]),
-  property: new Set(["dashboard", "marketplace", "listings", "pipeline", "messages", "notifications", "workspace", "support"]),
-  service: new Set(["dashboard", "marketplace", "listings", "pipeline", "messages", "notifications", "workspace", "support"]),
-  admin: new Set(["dashboard", "marketplace", "messages", "notifications", "workspace", "operations", "support", "admin"])
+  business: new Set(["dashboard", "marketplace", "pipeline", "messages", "notifications", "workspace", "profile", "support"]),
+  property: new Set(["dashboard", "marketplace", "listings", "pipeline", "messages", "notifications", "workspace", "profile", "support"]),
+  service: new Set(["dashboard", "marketplace", "listings", "pipeline", "messages", "notifications", "workspace", "profile", "support"]),
+  admin: new Set(["dashboard", "marketplace", "messages", "notifications", "workspace", "profile", "operations", "support", "admin"])
 };
 
 function roleKeyForUser(user) {
@@ -91,6 +97,7 @@ const navItems = [
   { key: "messages", label: "Messages", icon: MessageSquareText },
   { key: "notifications", label: "Notifications", icon: Bell },
   { key: "workspace", label: "Workspace", icon: Compass },
+  { key: "profile", label: "My Profile", icon: UserRound, showInSidebar: false },
   { key: "operations", label: "Operations", icon: Gauge },
   { key: "support", label: "Support", icon: LifeBuoy },
   { key: "admin", label: "Admin", icon: ShieldCheck }
@@ -98,15 +105,15 @@ const navItems = [
 
 // Member 1 - Module 1 & 2: marketplace search/filter defaults.
 const initialSearchQuery = {
-  area: "Banani",
+  area: "",
   type: "all",
   propertyType: "all",
   serviceCategory: "all",
-  sort: "distance",
-  minPrice: 0,
-  maxPrice: 150000,
-  minSize: 0,
-  maxSize: 0,
+  sort: "newest",
+  minPrice: "",
+  maxPrice: "",
+  minSize: "",
+  maxSize: "",
   page: 1,
   pageSize: 8
 };
@@ -150,25 +157,47 @@ function visiblePages(currentPage, totalPages) {
 }
 
 function viewFromPathname(pathname) {
-  if (pathname === "/messages") return "messages";
-  if (pathname === "/notifications") return "notifications";
-  return "dashboard";
+  const routes = {
+    "/": "dashboard",
+    "/marketplace": "marketplace",
+    "/listings": "listings",
+    "/bookings": "pipeline",
+    "/messages": "messages",
+    "/notifications": "notifications",
+    "/workspace": "workspace",
+    "/profile": "profile",
+    "/operations": "operations",
+    "/support": "support",
+    "/admin": "admin"
+  };
+  return routes[pathname] || "dashboard";
 }
 
 function pathnameForView(view) {
-  if (view === "messages") return "/messages";
-  if (view === "notifications") return "/notifications";
-  return "/";
+  const routes = {
+    dashboard: "/",
+    marketplace: "/marketplace",
+    listings: "/listings",
+    pipeline: "/bookings",
+    messages: "/messages",
+    notifications: "/notifications",
+    workspace: "/workspace",
+    profile: "/profile",
+    operations: "/operations",
+    support: "/support",
+    admin: "/admin"
+  };
+  return routes[view] || "/";
 }
 
 const photoAssets = {
-  "retail-front.jpg": "/images/listings/retail-front.jpg",
-  "retail-floor.jpg": "/images/listings/retail-floor.jpg",
-  "portfolio-1.jpg": "/images/listings/portfolio-1.jpg",
-  "portfolio-2.jpg": "/images/listings/portfolio-2.jpg",
-  "isp-rack.jpg": "/images/listings/isp-rack.jpg",
-  "office-floor.jpg": "/images/listings/office-floor.jpg",
-  "electric-team.jpg": "/images/listings/electric-team.jpg",
+  "retail-front.jpg": "/images/listings/retail-front-real.jpg",
+  "retail-floor.jpg": "/images/listings/retail-front-real.jpg",
+  "portfolio-1.jpg": "/images/listings/portfolio-real.jpg",
+  "portfolio-2.jpg": "/images/listings/portfolio-real.jpg",
+  "isp-rack.jpg": "/images/listings/isp-rack-real.jpg",
+  "office-floor.jpg": "/images/listings/office-floor-real.jpg",
+  "electric-team.jpg": "/images/listings/electric-team-real.jpg",
   "uploaded-photo.jpg": "/images/listings/uploaded-photo.jpg"
 };
 
@@ -193,6 +222,23 @@ const categoryOptions = [
   { value: "Vendor", label: "Vendor", type: "service", propertyType: "all", serviceCategory: "Vendor", icon: BriefcaseBusiness }
 ];
 
+const popularDhakaAreas = [
+  "Banani",
+  "Gulshan",
+  "Bashundhara",
+  "Uttara",
+  "Mohakhali",
+  "Tejgaon",
+  "Farmgate",
+  "Dhanmondi",
+  "Mohammadpur",
+  "Mirpur",
+  "Badda",
+  "Rampura",
+  "Motijheel",
+  "Paltan"
+];
+
 const managementProfiles = {
   business: {
     eyebrow: "Business Workspace",
@@ -211,15 +257,8 @@ const managementProfiles = {
     canCreate: true,
     inventoryTitle: "My Property Inventory",
     createTitle: "Create Property Listing",
-    defaultTitle: "New Banani Office Unit",
-    defaultCategory: "Office",
     categories: ["Office", "Shop"],
-    defaultPrice: "85000",
-    defaultSize: "720",
-    defaultFacilities: "Lift, Generator, Parking, Road access",
-    defaultCoverage: "Banani, Gulshan",
-    defaultPhotos: "office-floor.jpg",
-    defaultDescription: "Ready commercial property suitable for a growing team."
+    defaultFacilities: []
   },
   service: {
     eyebrow: "Service Workspace",
@@ -229,15 +268,8 @@ const managementProfiles = {
     canCreate: true,
     inventoryTitle: "My Service Packages",
     createTitle: "Create Service Package",
-    defaultTitle: "Complete Office Setup Package",
-    defaultCategory: "Interior Design",
     categories: ["Interior Design", "ISP", "Electrician", "Vendor"],
-    defaultPrice: "45000",
-    defaultSize: "0",
-    defaultFacilities: "Planning, Installation, Support, Maintenance",
-    defaultCoverage: "Banani, Gulshan, Mohakhali",
-    defaultPhotos: "portfolio-1.jpg",
-    defaultDescription: "Professional setup service package for new commercial offices."
+    defaultFacilities: []
   },
   admin: {
     eyebrow: "Admin Workspace",
@@ -293,6 +325,41 @@ const roleDashboardContent = {
   }
 };
 
+const roleGuides = {
+  business: [
+    { title: "Find the right place", text: "Search verified commercial spaces and setup services by location, category, price and size.", icon: Search, view: "marketplace", action: "Explore marketplace" },
+    { title: "Shortlist with confidence", text: "Open a listing to review its gallery, live map location, nearby places, ratings and suggested providers.", icon: Heart, view: "workspace", action: "Open workspace" },
+    { title: "Book and stay updated", text: "Request a property visit or service, then track accepted, declined or alternate-time responses.", icon: CalendarCheck, view: "pipeline", action: "View bookings" },
+    { title: "Talk directly", text: "Message owners and providers in real time, then leave a verified review after working together.", icon: MessageSquareText, view: "messages", action: "Open messages" }
+  ],
+  property: [
+    { title: "Complete verification", text: "Your listing tools become available after Admin approval, keeping the marketplace trustworthy.", icon: ShieldCheck, view: "notifications", action: "Check status" },
+    { title: "Publish a property", text: "Create a listing with verified address suggestions, accurate map placement, photos and searchable facilities.", icon: Building2, view: "listings", action: "Manage properties" },
+    { title: "Manage visit requests", text: "Accept, decline or propose another time while the requester receives live and email updates.", icon: CalendarCheck, view: "pipeline", action: "Open visit requests" },
+    { title: "Support interested businesses", text: "Use real-time messaging to answer questions before a visit or booking.", icon: MessageSquareText, view: "messages", action: "Open messages" }
+  ],
+  service: [
+    { title: "Complete verification", text: "Admin approval unlocks service publishing and protects businesses from unverified providers.", icon: ShieldCheck, view: "notifications", action: "Check status" },
+    { title: "Publish service packages", text: "Add coverage areas, category, availability, portfolio photos and facilities included in your service.", icon: Wrench, view: "listings", action: "Manage packages" },
+    { title: "Receive service bookings", text: "Respond to requests immediately with accept, decline or a practical alternate schedule.", icon: CalendarCheck, view: "pipeline", action: "Open bookings" },
+    { title: "Build customer trust", text: "Answer inquiries in real time and keep your availability and package details current.", icon: MessageSquareText, view: "messages", action: "Open messages" }
+  ],
+  admin: [
+    { title: "Verify trusted providers", text: "Review pending Property Owners and Service Providers, then approve or reject each account.", icon: ShieldCheck, view: "admin", action: "Open verification" },
+    { title: "Moderate inventory", text: "Inspect every property and service listing, including pending and unavailable records.", icon: Store, view: "admin", action: "Open inventory" },
+    { title: "Resolve reports", text: "Review reported listings or users, open the target and resolve, dismiss or remove unsafe content.", icon: Flag, view: "admin", action: "Review reports" },
+    { title: "Monitor operations", text: "Track platform health, support tickets and operational settings from Admin-only workspaces.", icon: Gauge, view: "operations", action: "View operations" }
+  ]
+};
+
+const settingDescriptions = {
+  max_booking_window_days: "How far ahead users can request a booking.",
+  email_notifications_enabled: "Send helpful booking, inquiry and review emails.",
+  auto_verify_business_owners: "Let Business Owners start browsing immediately.",
+  platform_commission_rate: "Default platform commission percentage.",
+  customer_service_phone: "Phone number shown in the Help and Support workspace."
+};
+
 function money(value) {
   return `BDT ${Number(value || 0).toLocaleString("en-BD")}`;
 }
@@ -322,6 +389,33 @@ function dateTimeLocalValue(value = Date.now() + 86400000) {
 function asList(value) {
   if (Array.isArray(value)) return value.join(", ");
   return value || "Not added";
+}
+
+function maskedEmail(value) {
+  const [local = "", domain = ""] = String(value || "").split("@");
+  if (!local || !domain) return "Private email";
+  const visible = local.slice(0, Math.min(2, local.length));
+  return `${visible}${"•".repeat(Math.max(4, Math.min(8, local.length - visible.length)))}@${domain}`;
+}
+
+const accountRoleLabels = {
+  "business-owner": "Business Owner",
+  "property-owner": "Property Owner",
+  "service-provider": "Service Provider",
+  admin: "Administrator"
+};
+
+function accountRoleLabel(value) {
+  return accountRoleLabels[value] || "OfficeKhoj Member";
+}
+
+function accountInitials(value) {
+  return String(value || "OfficeKhoj User")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "OK";
 }
 
 function isProviderProfile(profile) {
@@ -567,7 +661,7 @@ function ListingRow({ listing, onOpen, onSave, onBook, onMessage, canEngage = fa
         <div className="micro-row">
           <span><MapPin size={13} />{listing.searchDistanceLabel || listing.metricLabel}</span>
           <span><Star size={13} />{Number(listing.rating || 0).toFixed(1)}</span>
-          <span><Database size={13} />{listing.listingType}</span>
+          <span><TypeIcon size={13} />{listing.listingType === "service" ? "Setup service" : "Commercial space"}</span>
         </div>
       </div>
       <div className="row-actions">
@@ -660,7 +754,7 @@ function ListingEditForm({ listing, busy, onCancel, onSave }) {
       {listing.listingType === "property" ? (
         <label>Status<select name="status" defaultValue={listing.status}>{statuses.map((status) => <option key={status}>{status}</option>)}</select></label>
       ) : null}
-      <label>{listing.listingType === "service" ? "Service features" : "Facilities"}<input name="facilities" defaultValue={(listing.facilities || []).join(", ")} /></label>
+      <FacilitiesPicker listingType={listing.listingType} initialValues={listing.facilities || []} />
       <label>Coverage areas{listing.listingType === "property" ? " (optional)" : ""}<input name="coverageAreas" defaultValue={(listing.coverageAreas || []).join(", ")} required={listing.listingType === "service"} /></label>
       <PhotoUploadField
         listingType={listing.listingType}
@@ -720,7 +814,7 @@ function ManagementListingRow({
         <div className="micro-row">
           <span><MapPin size={13} />{listing.metricLabel}</span>
           <span><Star size={13} />{Number(listing.rating || 0).toFixed(1)}</span>
-          <span><Database size={13} />{profile.badge}</span>
+          <span><UserRound size={13} />{profile.badge}</span>
         </div>
       </div>
       <form className="management-actions" onSubmit={(event) => onPrice(event, listing._id)}>
@@ -769,7 +863,7 @@ export default function App() {
   const [health, setHealth] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [operations, setOperations] = useState(null);
-  const [admin, setAdmin] = useState({ pendingUsers: [], pendingListings: [], reports: [] });
+  const [admin, setAdmin] = useState({ pendingUsers: [], pendingListings: [], reports: [], inventory: [], inventorySummary: {} });
   const [listings, setListings] = useState([]);
   const [meta, setMeta] = useState({ page: 1, totalPages: 1, total: 0, summary: {} });
   const [inventoryListings, setInventoryListings] = useState([]);
@@ -804,18 +898,93 @@ export default function App() {
   const [bookingTargetId, setBookingTargetId] = useState("");
   const [alternateBookingId, setAlternateBookingId] = useState("");
   const [deleteTargetId, setDeleteTargetId] = useState("");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [reportTarget, setReportTarget] = useState(null);
+  const [reportReviewId, setReportReviewId] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (
+    typeof window !== "undefined" && window.matchMedia("(min-width: 1021px)").matches
+  ));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [marketplaceView, setMarketplaceView] = useState("results");
   const [dashboardTab, setDashboardTab] = useState("overview");
   const [listingWorkspaceTab, setListingWorkspaceTab] = useState("manage");
   const [workspaceTab, setWorkspaceTab] = useState("overview");
+  const [profileSection, setProfileSection] = useState("overview");
+  const [profilePhotoUploading, setProfilePhotoUploading] = useState(false);
+  const [profilePhotoError, setProfilePhotoError] = useState("");
+  const [showPrivateEmail, setShowPrivateEmail] = useState(false);
   const [adminTab, setAdminTab] = useState("queue");
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideStep, setGuideStep] = useState(0);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const toastTimer = useRef(null);
   const authBootstrapRef = useRef(false);
   const conversationsRef = useRef([]);
   const selectedConversationIdRef = useRef("");
+  const areaRailRef = useRef(null);
+  const categoryRailRef = useRef(null);
+  const accountMenuRef = useRef(null);
+
+  useEffect(() => {
+    function closeOpenDialog(event) {
+      if (event.key !== "Escape") return;
+      setReportTarget(null);
+      setReportReviewId("");
+      setBookingTargetId("");
+      setAlternateBookingId("");
+      setDeleteTargetId("");
+      setGuideOpen(false);
+      setAccountMenuOpen(false);
+    }
+    window.addEventListener("keydown", closeOpenDialog);
+    return () => window.removeEventListener("keydown", closeOpenDialog);
+  }, []);
+
+  useEffect(() => {
+    const hasOpenDialog = guideOpen || reportTarget || reportReviewId || bookingTargetId || alternateBookingId || deleteTargetId;
+    if (!hasOpenDialog) return undefined;
+
+    const previousFocus = document.activeElement;
+    const dialog = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).at(-1);
+    if (!dialog) return undefined;
+    const focusableSelector = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+    const focusable = () => Array.from(dialog.querySelectorAll(focusableSelector)).filter((element) => !element.hidden);
+    const firstControl = focusable()[0];
+    firstControl?.focus();
+
+    function containDialogFocus(event) {
+      if (event.key !== "Tab") return;
+      const controls = focusable();
+      if (!controls.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    dialog.addEventListener("keydown", containDialogFocus);
+    return () => {
+      dialog.removeEventListener("keydown", containDialogFocus);
+      if (previousFocus instanceof HTMLElement && document.contains(previousFocus)) previousFocus.focus();
+    };
+  }, [guideOpen, reportTarget, reportReviewId, bookingTargetId, alternateBookingId, deleteTargetId]);
+
+  useEffect(() => {
+    function closeAccountMenu(event) {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target)) setAccountMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", closeAccountMenu);
+    return () => document.removeEventListener("pointerdown", closeAccountMenu);
+  }, []);
 
   const selectedListing = useMemo(
     () => detail?.listing || listings.find((item) => item._id === selectedListingId) || listings[0],
@@ -832,9 +1001,15 @@ export default function App() {
 
   const deleteTargetListing = useMemo(
     () => inventoryListings.find((item) => item._id === deleteTargetId) ||
+      (admin.inventory || []).find((item) => item._id === deleteTargetId) ||
       listings.find((item) => item._id === deleteTargetId) ||
       (detail?.listing?._id === deleteTargetId ? detail.listing : null),
-    [deleteTargetId, inventoryListings, listings, detail]
+    [admin.inventory, deleteTargetId, inventoryListings, listings, detail]
+  );
+
+  const selectedAdminReport = useMemo(
+    () => (admin.reports || []).find((report) => report._id === reportReviewId) || null,
+    [admin.reports, reportReviewId]
   );
 
   const maxArea = Math.max(...(operations?.areaDemand || []).map((item) => item.count), 1);
@@ -843,6 +1018,11 @@ export default function App() {
     () => operations?.settings?.find((setting) => setting.key === "customer_service_phone")?.value || CUSTOMER_SERVICE_PHONE,
     [operations]
   );
+  const visibleTickets = useMemo(() => {
+    const tickets = operations?.tickets || [];
+    if (role === "admin") return tickets;
+    return tickets.filter((ticket) => String(ticket.requester?._id || ticket.requester) === String(user?._id));
+  }, [operations?.tickets, role, user?._id]);
   const managementProfile = managementProfiles[role] || managementProfiles.business;
   const currentRole = roles.find((item) => item.key === role) || roles[0];
   const currentNavItem = navItems.find((item) => item.key === view);
@@ -855,6 +1035,8 @@ export default function App() {
     setAdvancedFiltersOpen(false);
     setMarketplaceView("results");
     setMobileMenuOpen(false);
+    setGuideOpen(false);
+    setGuideStep(0);
   }, [role]);
 
   function notify(message) {
@@ -868,12 +1050,14 @@ export default function App() {
       ? nextView
       : roleLandingViews[activeRole] || "dashboard";
     if (allowedView !== nextView) notify("That workspace is not available for your account role.");
+    if (allowedView === "profile") setWorkspaceTab("profile");
     const nextPath = pathnameForView(allowedView);
     if (window.location.pathname !== nextPath) {
       window.history[replace ? "replaceState" : "pushState"]({ view: allowedView }, "", nextPath);
     }
     setView(allowedView);
     setMobileMenuOpen(false);
+    setAccountMenuOpen(false);
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }
 
@@ -893,6 +1077,15 @@ export default function App() {
 
   function updateSearchDraft(field, value) {
     setSearchDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function scrollDiscoveryRail(ref, direction) {
+    const rail = ref.current;
+    if (!rail) return;
+    rail.scrollBy({
+      left: direction * Math.max(220, Math.round(rail.clientWidth * 0.72)),
+      behavior: "smooth"
+    });
   }
 
   async function applySearch(nextQuery, options = {}) {
@@ -926,7 +1119,7 @@ export default function App() {
     setHealth(null);
     setDashboard(null);
     setOperations(null);
-    setAdmin({ pendingUsers: [], pendingListings: [], reports: [] });
+    setAdmin({ pendingUsers: [], pendingListings: [], reports: [], inventory: [], inventorySummary: {} });
     setListings([]);
     setInventoryListings([]);
     setFavorites([]);
@@ -941,19 +1134,22 @@ export default function App() {
     setAlternateBookingId("");
   }
 
-  async function establishSession(data) {
+  async function establishSession(data, options = {}) {
     if (data.token) setAuthToken(data.token);
     const authenticatedUser = data.user;
     const nextRole = roleKeyForUser(authenticatedUser);
-    const nextQuery = nextRole === "business"
-      ? queryFromSavedPreferences(authenticatedUser, initialSearchQuery)
-      : initialSearchQuery;
+    const nextQuery = { ...initialSearchQuery };
 
     setUser(authenticatedUser);
     setRole(nextRole);
     setQuery(nextQuery);
     setSearchDraft(nextQuery);
-    navigateToView(roleLandingViews[nextRole] || "dashboard", {
+    const requestedView = options.requestedView;
+    const sessionView = requestedView && canAccessView(nextRole, requestedView)
+      ? requestedView
+      : roleLandingViews[nextRole] || "dashboard";
+    if (sessionView === "profile") setWorkspaceTab("profile");
+    navigateToView(sessionView, {
       replace: true,
       activeRole: nextRole
     });
@@ -1063,8 +1259,12 @@ export default function App() {
       const activeRole = options.activeRole || role;
       const params = new URLSearchParams(nextQuery).toString();
       const adminRequest = activeRole === "admin"
-        ? api("/admin/verifications")
-        : Promise.resolve({ pendingUsers: [], pendingListings: [], reports: [] });
+        ? Promise.all([api("/admin/verifications"), api("/admin/inventory")]).then(([queue, inventory]) => ({
+          ...queue,
+          inventory: inventory.results || [],
+          inventorySummary: inventory.summary || {}
+        }))
+        : Promise.resolve({ pendingUsers: [], pendingListings: [], reports: [], inventory: [], inventorySummary: {} });
       const [healthData, dashboardData, operationsData, listingData, adminData] = await Promise.all([
         api("/health"),
         api("/dashboard"),
@@ -1131,7 +1331,14 @@ export default function App() {
   async function loadMessages(id = selectedConversationId) {
     if (!id) return;
     const data = await api(`/messages/${id}`);
-    setMessages(data.messages || []);
+    const nextMessages = data.messages || [];
+    setMessages(nextMessages);
+    setConversations((current) => current.map((conversation) => (
+      String(conversation._id) === String(id)
+        ? { ...conversation, messages: nextMessages }
+        : conversation
+    )));
+    return nextMessages;
   }
 
   useEffect(() => {
@@ -1145,7 +1352,7 @@ export default function App() {
 
     setBusy(true);
     api("/auth/me")
-      .then((data) => establishSession(data))
+      .then((data) => establishSession(data, { requestedView: viewFromPathname(window.location.pathname) }))
       .catch(() => {
         setAuthToken(null);
         resetWorkspaceData();
@@ -1234,15 +1441,46 @@ export default function App() {
       });
 
       if (String(event.conversationId) === String(selectedConversationIdRef.current)) {
-        setMessages((current) => (
-          current.some((item) => String(item._id) === String(event.message._id))
+        const sentByCurrentUser = String(event.message.sender?._id || event.message.sender) === String(user._id);
+        if (sentByCurrentUser) {
+          setMessages((current) => current.some((message) => String(message._id) === String(event.message._id))
             ? current
-            : [...current, event.message]
-        ));
+            : [...current, event.message]);
+        } else {
+          api(`/messages/${event.conversationId}`)
+            .then((data) => {
+              const nextMessages = data.messages || [];
+              setMessages(nextMessages);
+              setConversations((current) => current.map((conversation) => (
+                String(conversation._id) === String(event.conversationId)
+                  ? { ...conversation, messages: nextMessages, updatedAt: event.message.createdAt }
+                  : conversation
+              )));
+            })
+            .catch((error) => notify(error.message));
+        }
       } else if (!selectedConversationIdRef.current) {
         selectedConversationIdRef.current = event.conversationId;
         setSelectedConversationId(event.conversationId);
         setMessages([event.message]);
+      }
+    };
+    const handleMessagesRead = (event) => {
+      if (!event?.conversationId || !event?.readerId || !Array.isArray(event.messageIds)) return;
+      const readIds = new Set(event.messageIds.map(String));
+      const markRead = (message) => readIds.has(String(message._id))
+        ? {
+            ...message,
+            readBy: Array.from(new Set([...(message.readBy || []).map((reader) => String(reader?._id || reader)), String(event.readerId)]))
+          }
+        : message;
+      setConversations((current) => current.map((conversation) => (
+        String(conversation._id) === String(event.conversationId)
+          ? { ...conversation, messages: (conversation.messages || []).map(markRead) }
+          : conversation
+      )));
+      if (String(event.conversationId) === String(selectedConversationIdRef.current)) {
+        setMessages((current) => current.map(markRead));
       }
     };
 
@@ -1250,6 +1488,7 @@ export default function App() {
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
     socket.on("message:new", handleMessage);
+    socket.on("message:read", handleMessagesRead);
     socket.on("booking:updated", handleBookingUpdate);
     socket.io.on("reconnect_attempt", handleReconnectAttempt);
     if (socket.connected) handleConnect();
@@ -1259,6 +1498,7 @@ export default function App() {
       socket.off("disconnect", handleDisconnect);
       socket.off("connect_error", handleConnectError);
       socket.off("message:new", handleMessage);
+      socket.off("message:read", handleMessagesRead);
       socket.off("booking:updated", handleBookingUpdate);
       socket.io.off("reconnect_attempt", handleReconnectAttempt);
       disconnectSocket();
@@ -1421,6 +1661,52 @@ export default function App() {
     }, "Booking requested");
   }
 
+  function openReportForm(targetType, targetId, targetLabel) {
+    setReportTarget({ targetType, targetId, targetLabel });
+  }
+
+  async function submitReport(event) {
+    event.preventDefault();
+    if (!reportTarget) return;
+    const form = Object.fromEntries(new FormData(event.currentTarget).entries());
+    await runAction(async () => {
+      await api("/reports", {
+        method: "POST",
+        body: JSON.stringify({
+          targetType: reportTarget.targetType,
+          targetId: reportTarget.targetId,
+          reason: form.reason
+        })
+      });
+      setReportTarget(null);
+      await loadCore(user);
+    }, "Report submitted for Admin review");
+  }
+
+  async function moderateReport(report, status, resolutionAction = status) {
+    await runAction(async () => {
+      await api(`/admin/reports/${report._id}`, {
+        method: "PUT",
+        body: JSON.stringify({ status, resolutionAction })
+      });
+      setReportReviewId("");
+      await loadCore(user, query, { activeRole: role });
+    }, status === "dismissed" ? "Report dismissed" : "Report resolved");
+  }
+
+  async function removeReportedListing(report) {
+    if (!report?.target?._id || report.targetType !== "listing") return;
+    await runAction(async () => {
+      await api(`/listings/${report.target._id}`, { method: "DELETE" });
+      await api(`/admin/reports/${report._id}`, {
+        method: "PUT",
+        body: JSON.stringify({ status: "resolved", resolutionAction: "target-removed" })
+      });
+      setReportReviewId("");
+      await loadCore(user, query, { resetSelections: true, activeRole: role });
+    }, "Reported listing removed");
+  }
+
   function requestBooking(id) {
     setBookingTargetId(id);
   }
@@ -1465,16 +1751,27 @@ export default function App() {
     });
   }
 
-  async function sendMessage(event) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = Object.fromEntries(new FormData(formElement).entries());
-    if (!form.conversationId || !form.message.trim()) return;
-    await runAction(async () => {
-      await api("/messages", { method: "POST", body: JSON.stringify(form) });
-      formElement.elements.message.value = "";
-      await loadMessages(form.conversationId);
-      await loadCore(user);
+  async function sendMessage(payload) {
+    if (!payload?.conversationId || (!payload.message?.trim() && !payload.attachmentUrl)) return undefined;
+    return runAction(async () => {
+      const data = await api("/messages", { method: "POST", body: JSON.stringify(payload) });
+      if (data.message?._id) {
+        setMessages((current) => current.some((message) => String(message._id) === String(data.message._id))
+          ? current
+          : [...current, data.message]);
+        setConversations((current) => current.map((conversation) => (
+          String(conversation._id) === String(payload.conversationId)
+            ? {
+                ...conversation,
+                messages: (conversation.messages || []).some((message) => String(message._id) === String(data.message._id))
+                  ? conversation.messages
+                  : [...(conversation.messages || []), data.message],
+                updatedAt: data.message.createdAt
+              }
+            : conversation
+        )));
+      }
+      return data;
     }, "Message sent");
   }
 
@@ -1553,6 +1850,14 @@ export default function App() {
     if (!item.read) await markNotificationRead(item._id);
     if (item.type === "message") navigateToView("messages");
     if (item.type === "booking") navigateToView("pipeline");
+    if (item.type === "verification" && role === "admin") {
+      setAdminTab("queue");
+      navigateToView("admin");
+    }
+    if (item.type === "system" && role === "admin" && item.title === "New content report") {
+      setAdminTab("queue");
+      navigateToView("admin");
+    }
   }
 
   async function updateProfile(event) {
@@ -1594,11 +1899,11 @@ export default function App() {
     }, "Setting updated");
   }
 
-  async function verifyUser(id) {
+  async function updateUserVerification(id, status) {
     await runAction(async () => {
-      await api(`/admin/users/${id}/verify`, { method: "PUT", body: JSON.stringify({ status: "verified" }) });
+      await api(`/admin/users/${id}/verify`, { method: "PUT", body: JSON.stringify({ status }) });
       await loadCore(user);
-    }, "User verified");
+    }, status === "verified" ? "User verified" : "User rejected");
   }
 
   async function moderateListing(id, verificationStatus = "verified") {
@@ -1613,6 +1918,25 @@ export default function App() {
     setDetail(null);
     setWorkspaceTab("overview");
     navigateToView("workspace");
+  }
+
+  async function changeProfilePhoto(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !user?._id) return;
+
+    setProfilePhotoUploading(true);
+    setProfilePhotoError("");
+    try {
+      const data = await uploadProfilePhoto(file, user._id);
+      setUser(data.profile);
+      notify("Profile photo updated");
+    } catch (error) {
+      setProfilePhotoError(error.message);
+      notify(error.message);
+    } finally {
+      setProfilePhotoUploading(false);
+    }
   }
 
   function renderDashboard() {
@@ -1641,7 +1965,7 @@ export default function App() {
         { icon: Star, tone: "blue", label: "Provider rating", value: `${Number(user?.averageRating || 0).toFixed(1)}/5`, note: `${user?.reviewCount || 0} reviews` }
       ],
       admin: [
-        { icon: Store, tone: "green", label: "Active listings", value: number(dashboard?.activeListings), note: `${dashboard?.properties || 0} property, ${dashboard?.services || 0} service` },
+        { icon: Store, tone: "green", label: "Active listings", value: number(dashboard?.activeListings), note: `${dashboard?.activeProperties || 0} property, ${dashboard?.activeServices || 0} service` },
         { icon: UsersRound, tone: "blue", label: "Platform users", value: number(dashboard?.users), note: `${dashboard?.pendingUsersCount || 0} pending verification` },
         { icon: CalendarCheck, tone: "amber", label: "Bookings", value: number(dashboard?.bookings), note: `${operations?.operations?.conversionRate || 0}% conversion` },
         { icon: Activity, tone: "rose", label: "Open queue", value: number(queueTotal), note: "Moderation and support" }
@@ -1660,7 +1984,7 @@ export default function App() {
         <PageHeader
           eyebrow={`${currentRole.label} workspace`}
           title={`${currentRole.label} Dashboard`}
-          meta={<Status value={role === "admin" ? (operations?.database?.status || "connecting") : (user?.verificationStatus || "active")} />}
+          meta={<Status value={role === "admin" ? "Platform ready" : (user?.verificationStatus || "active")} />}
         >
           <button className="action secondary" type="button" onClick={() => loadCore(user)}><Activity size={16} />Refresh</button>
         </PageHeader>
@@ -1765,10 +2089,19 @@ export default function App() {
         {/* Member 1 - Module 1 & 2: location + type/category + price/size filters. */}
         <form className="filter-bar member-search-filter progressive-filter" onSubmit={submitSearch}>
           <div className="filter-core">
-            <label className="area-filter">Area / location<input name="area" placeholder="e.g. Banani, Dhaka" value={searchDraft.area} onChange={(event) => updateSearchDraft("area", event.target.value)} /></label>
-            <label>Result type<select name="type" value={searchDraft.type} onChange={(event) => updateSearchDraft("type", event.target.value)}><option value="all">Spaces + services</option><option value="property">Commercial spaces</option><option value="service">Setup services</option></select></label>
-            <label>Sort<select name="sort" value={searchDraft.sort} onChange={(event) => updateSearchDraft("sort", event.target.value)}><option value="distance">Nearest first</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option><option value="rating">Top rated</option><option value="newest">Newest</option></select></label>
-            <button className="action primary" type="submit"><Search size={16} />Search</button>
+            <label className="area-filter search-command-field">
+              <span className="search-field-label"><MapPin size={15} />Location</span>
+              <input name="area" aria-label="Area / location" placeholder="Search area or address" value={searchDraft.area} onChange={(event) => updateSearchDraft("area", event.target.value)} />
+            </label>
+            <label className="search-command-field">
+              <span className="search-field-label"><Building2 size={15} />Looking for</span>
+              <select name="type" aria-label="Result type" value={searchDraft.type} onChange={(event) => updateSearchDraft("type", event.target.value)}><option value="all">Spaces + services</option><option value="property">Commercial spaces</option><option value="service">Setup services</option></select>
+            </label>
+            <label className="search-command-field">
+              <span className="search-field-label"><SlidersHorizontal size={15} />Sort results</span>
+              <select name="sort" aria-label="Sort" value={searchDraft.sort} onChange={(event) => updateSearchDraft("sort", event.target.value)}><option value="distance">Nearest first</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option><option value="rating">Top rated</option><option value="newest">Newest</option></select>
+            </label>
+            <button className="action primary search-submit" type="submit"><Search size={18} /><span>Search</span></button>
             <button
               className={`action filter-toggle ${advancedFiltersOpen ? "active" : ""}`}
               type="button"
@@ -1800,18 +2133,36 @@ export default function App() {
             </div>
           ) : null}
         </form>
-        {meta.searchLocation ? (
-          <div className="geocode-status" aria-live="polite">
-            <MapPin size={17} />
-            <div>
-              <strong>{meta.searchLocation.area || searchDraft.area}</strong>
-              <span>{meta.searchLocation.displayName}</span>
+        {meta.geocodeWarning ? <p className="geocode-warning">We could not verify this area precisely, so results use the nearest available location.</p> : null}
+        <div className="area-discovery" aria-label="Popular Dhaka areas">
+          <div className="area-discovery-label"><MapPin size={16} /><span><strong>Explore Dhaka</strong><small>Choose an area or type any location above</small></span></div>
+          <div className="discovery-rail-shell">
+            <button className="rail-arrow" type="button" aria-label="Show previous Dhaka areas" onClick={() => scrollDiscoveryRail(areaRailRef, -1)}><ChevronLeft size={17} /></button>
+            <div className="area-chip-list" ref={areaRailRef}>
+              {popularDhakaAreas.map((area) => (
+                <button
+                  type="button"
+                  key={area}
+                  className={String(searchDraft.area).toLowerCase() === area.toLowerCase() ? "active" : ""}
+                  onClick={() => applySearch({ ...searchDraft, area })}
+                  aria-pressed={String(searchDraft.area).toLowerCase() === area.toLowerCase()}
+                >
+                  {area}
+                </button>
+              ))}
             </div>
-            <Pill tone={meta.searchLocation.source === "nominatim" ? "success" : "warning"}>{meta.searchLocation.source === "nominatim" ? "Nominatim resolved" : "Demo fallback"}</Pill>
+            <button className="rail-arrow" type="button" aria-label="Show more Dhaka areas" onClick={() => scrollDiscoveryRail(areaRailRef, 1)}><ChevronRight size={17} /></button>
           </div>
-        ) : null}
-        {meta.geocodeWarning ? <p className="geocode-warning">{meta.geocodeWarning}</p> : null}
-        <div className="photo-option-grid">
+        </div>
+        <div className="category-strip-heading">
+          <span><Compass size={17} /></span>
+          <div><strong>Browse by category</strong><small>Scroll sideways to see every space and service type.</small></div>
+          <div className="discovery-rail-actions" aria-label="Category scroll controls">
+            <button className="rail-arrow" type="button" aria-label="Show previous categories" onClick={() => scrollDiscoveryRail(categoryRailRef, -1)}><ChevronLeft size={17} /></button>
+            <button className="rail-arrow" type="button" aria-label="Show more categories" onClick={() => scrollDiscoveryRail(categoryRailRef, 1)}><ChevronRight size={17} /></button>
+          </div>
+        </div>
+        <div className="photo-option-grid" ref={categoryRailRef} role="group" aria-label="Browse listings by category">
           {categoryOptions.map((option) => {
             const OptionIcon = option.icon;
             return (
@@ -1824,6 +2175,8 @@ export default function App() {
               }`}
               key={option.value}
               onClick={() => selectCategoryOption(option)}
+              title={`Show ${option.label} listings`}
+              aria-label={`Show ${option.label} listings`}
             >
                 <span className="category-option-icon"><OptionIcon size={17} /></span>
                 <span className="category-option-label">{option.label}</span>
@@ -1922,25 +2275,29 @@ export default function App() {
                   required
                 />
                 <input type="hidden" name="addressId" value={selectedAddress?.id || ""} readOnly />
-                <label>Title<input name="title" defaultValue={profile.defaultTitle} minLength="4" required /></label>
+                <label>Title<input name="title" placeholder={profile.listingType === "service" ? "e.g. Complete Office Setup" : "e.g. Banani Commercial Office"} minLength="4" required /></label>
                 <div className="field-row">
-                  <label>{profile.listingType === "service" ? "Service category" : "Space type"}<select name="category" defaultValue={profile.defaultCategory}>{profile.categories.map((category) => <option key={category}>{category}</option>)}</select></label>
-                  <label>{profile.listingType === "service" ? "Starting price" : "Monthly rent"}<input name="price" type="number" min="1" defaultValue={profile.defaultPrice} required /></label>
+                  <label>{profile.listingType === "service" ? "Service category" : "Space type"}<select name="category" defaultValue="" required><option value="" disabled>Choose a category</option>{profile.categories.map((category) => <option key={category}>{category}</option>)}</select></label>
+                  <label>{profile.listingType === "service" ? "Starting price" : "Monthly rent"}<input name="price" type="number" min="1" placeholder="Enter amount in BDT" required /></label>
                 </div>
                 {profile.listingType === "property" ? (
-                  <label>Size (sq ft)<input name="size" type="number" min="1" defaultValue={profile.defaultSize} required /></label>
+                  <label>Size (sq ft)<input name="size" type="number" min="1" placeholder="Enter usable floor area" required /></label>
                 ) : (
                   <input name="size" type="hidden" defaultValue="0" />
                 )}
-                <label>{profile.listingType === "service" ? "Service features" : "Facilities"}<input name="facilities" defaultValue={profile.defaultFacilities} /></label>
-                <label>Coverage areas{profile.listingType === "property" ? " (optional)" : ""}<input name="coverageAreas" defaultValue={profile.defaultCoverage} required={profile.listingType === "service"} /></label>
+                <FacilitiesPicker
+                  listingType={profile.listingType}
+                  initialValues={profile.defaultFacilities}
+                  resetSignal={createAddressResetKey}
+                />
+                <label>Coverage areas{profile.listingType === "property" ? " (optional)" : ""}<input name="coverageAreas" placeholder="e.g. Banani, Gulshan, Dhanmondi" required={profile.listingType === "service"} /></label>
                 <PhotoUploadField
                   listingType={profile.listingType}
                   label={profile.listingType === "service" ? "Portfolio photos" : "Property photos"}
                   resetSignal={createPhotoResetKey}
                   onUploadingChange={setCreatePhotoUploading}
                 />
-                <label>{profile.listingType === "service" ? "Portfolio / service description" : "Description"}<textarea name="description" defaultValue={profile.defaultDescription} /></label>
+                <label>{profile.listingType === "service" ? "Portfolio / service description" : "Description"}<textarea name="description" placeholder={profile.listingType === "service" ? "Describe the service scope, delivery and support." : "Describe access, layout and suitability for a business."} /></label>
                 <button className="action primary" type="submit" disabled={busy || createPhotoUploading}><ListPlus size={16} />{createPhotoUploading ? "Uploading photos..." : `Save ${profile.listingType === "service" ? "Service" : "Property"}`}</button>
               </form>
             ) : (
@@ -2078,21 +2435,80 @@ export default function App() {
     const averageRating = Number(reviewSummary.averageRating ?? listing?.rating ?? 0);
     const reviewCount = Number(reviewSummary.reviewCount ?? listing?.reviewCount ?? reviews.length ?? 0);
     const distribution = reviewSummary.distribution || {};
+    const profileRole = accountRoleLabel(user?.role);
+    const profileVerification = user?.verificationStatus || (role === "admin" ? "verified" : "pending");
+    const unreadCount = notifications.filter((item) => !item.read).length;
+    const profileStatsByRole = {
+      business: [
+        { icon: Heart, tone: "rose", label: "Saved", value: favorites.length, note: "shortlisted places" },
+        { icon: CalendarCheck, tone: "amber", label: "Bookings", value: bookings.length, note: "visits and services" },
+        { icon: MessageSquareText, tone: "blue", label: "Conversations", value: conversations.length, note: "owners and providers" }
+      ],
+      property: [
+        { icon: Building2, tone: "blue", label: "Properties", value: inventoryListings.length, note: "managed listings" },
+        { icon: CalendarCheck, tone: "amber", label: "Visit requests", value: bookings.length, note: "business inquiries" },
+        { icon: Star, tone: "green", label: "Rating", value: Number(user?.averageRating || 0).toFixed(1), note: `${user?.reviewCount || 0} reviews` }
+      ],
+      service: [
+        { icon: Wrench, tone: "teal", label: "Packages", value: inventoryListings.length, note: "published services" },
+        { icon: CalendarCheck, tone: "amber", label: "Client requests", value: bookings.length, note: "service bookings" },
+        { icon: Star, tone: "blue", label: "Rating", value: Number(user?.averageRating || 0).toFixed(1), note: `${user?.reviewCount || 0} reviews` }
+      ],
+      admin: [
+        { icon: UsersRound, tone: "blue", label: "Pending users", value: admin.pendingUsers?.length || 0, note: "verification queue" },
+        { icon: Store, tone: "green", label: "Inventory", value: admin.inventorySummary?.total || 0, note: "all listings" },
+        { icon: Flag, tone: "rose", label: "Open reports", value: admin.reports?.length || 0, note: "moderation queue" }
+      ]
+    };
+    const profileStats = profileStatsByRole[role] || profileStatsByRole.business;
+    const isProfileView = view === "profile" || workspaceTab === "profile";
+    const isProfileSettings = isProfileView && profileSection === "settings";
+    const recentProfileActivity = notifications.slice(0, 4);
+    const roleProfileFields = role === "business"
+      ? [user?.businessType, user?.preferredArea, Number(user?.budgetMax) > 0]
+      : role === "service"
+        ? [user?.tradeLicense, user?.coverageAreas?.length, user?.verificationStatus === "verified"]
+        : role === "property"
+          ? [user?.tradeLicense, user?.nid, user?.verificationStatus === "verified"]
+          : [user?.status === "active", user?.verificationStatus === "verified"];
+    const profileCompletionFields = [user?.name, user?.phone, user?.email, user?.profilePhotoUrl, ...roleProfileFields];
+    const profileCompletion = Math.round((profileCompletionFields.filter(Boolean).length / profileCompletionFields.length) * 100);
+    const membershipDate = user?.createdAt
+      ? new Date(user.createdAt).toLocaleDateString([], { month: "short", year: "numeric" })
+      : "Current member";
     return (
       <>
-        <PageHeader eyebrow="Workspace" title={listing?.title || "Client Workspace"} meta={listing && <Status value={listing.status} />} />
-        <ViewTabs
-          label="Workspace sections"
-          value={workspaceTab}
-          onChange={setWorkspaceTab}
-          items={[
-            { key: "overview", label: "Overview", icon: Store },
-            { key: "nearby", label: "Nearby & services", icon: MapPinned },
-            { key: "reviews", label: "Reviews", icon: Star, count: reviewCount },
-            { key: "profile", label: "My profile", icon: UserRound },
-            ...(role === "business" ? [{ key: "favorites", label: "Saved", icon: Heart, count: favorites.length }] : [])
-          ]}
+        <PageHeader
+          eyebrow={isProfileView ? (isProfileSettings ? "Preferences & security" : "Private account") : "Workspace"}
+          title={isProfileView ? (isProfileSettings ? "Account Settings" : "My Profile") : (listing?.title || "Client Workspace")}
+          meta={isProfileView ? <Status value={profileVerification} /> : (listing && <Status value={listing.status} />)}
         />
+        {isProfileView ? (
+          <div className="profile-context-bar">
+            <div><UserRound size={17} /><span><strong>Account center</strong><small>Private details and role access</small></span></div>
+            <div className="profile-section-switcher" role="tablist" aria-label="Account center sections">
+              <button className={profileSection === "overview" ? "active" : ""} type="button" role="tab" aria-selected={profileSection === "overview"} onClick={() => setProfileSection("overview")}><UserRound size={15} />Profile overview</button>
+              <button className={profileSection === "settings" ? "active" : ""} type="button" role="tab" aria-selected={profileSection === "settings"} onClick={() => setProfileSection("settings")}><Settings size={15} />Account settings</button>
+            </div>
+            <button className="action secondary small" type="button" onClick={() => {
+              setWorkspaceTab("overview");
+              navigateToView(role === "admin" ? "admin" : "workspace");
+            }}><ChevronLeft size={15} />{role === "admin" ? "Back to Admin" : "Back to workspace"}</button>
+          </div>
+        ) : (
+          <ViewTabs
+            label="Workspace sections"
+            value={workspaceTab}
+            onChange={setWorkspaceTab}
+            items={[
+              { key: "overview", label: "Overview", icon: Store },
+              { key: "nearby", label: "Nearby & services", icon: MapPinned },
+              { key: "reviews", label: "Reviews", icon: Star, count: reviewCount },
+              { key: "profile", label: "My profile", icon: UserRound },
+              ...(role === "business" ? [{ key: "favorites", label: "Saved", icon: Heart, count: favorites.length }] : [])
+            ]}
+          />
+        )}
         <section className="workspace-grid workspace-focus-grid">
           {workspaceTab === "overview" ? (
             <div className="panel detail-panel">
@@ -2114,7 +2530,7 @@ export default function App() {
                   <MetricCard icon={Store} tone="teal" label="Facilities" value={asList(listing.facilities)} />
                 </div>
                 <div className="detail-location-map">
-                  <div className="panel-head"><h3>Listing Location</h3><Pill tone="neutral">OpenStreetMap</Pill></div>
+                  <div className="panel-head"><h3>Listing Location</h3><Pill tone="neutral">Interactive map</Pill></div>
                   {/* Member 1 - Module 3: reuse the same Leaflet map for a single listing. */}
                   <ListingMap listings={[listing]} />
                 </div>
@@ -2125,8 +2541,16 @@ export default function App() {
                     <p>{listing.owner?.role || listing.listingType} - {listing.owner?.verificationStatus || "verified"}</p>
                     <ProviderRatingLine profile={listing.owner} />
                   </div>
-                  {role === "business" ? (
-                    <button type="button" className="action primary small" onClick={() => startConversation(listing._id)}><MessageSquareText size={15} />Message</button>
+                  {role !== "admin" && String(listing.owner?._id || "") !== String(user?._id || "") ? (
+                    <div className="row-actions">
+                      {role === "business" ? (
+                        <button type="button" className="action primary small" onClick={() => startConversation(listing._id)}><MessageSquareText size={15} />Message</button>
+                      ) : null}
+                      <button type="button" className="action secondary small" onClick={() => openReportForm("listing", listing._id, listing.title)}><Flag size={15} />Report {listing.listingType}</button>
+                      {listing.owner?._id ? (
+                        <button type="button" className="action secondary small" onClick={() => openReportForm("user", listing.owner._id, listing.owner.name || "listing owner")}><Flag size={15} />Report user</button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
                 {role === "business" && listing.listingType === "property" ? (
@@ -2158,10 +2582,10 @@ export default function App() {
               {/* Member 2 - Module 3: live Foursquare data, with demo fallback from the backend. */}
               <h3>Nearby Places</h3>
               <Pill tone={detail?.nearbySource === "foursquare" ? "success" : "warning"}>
-                {detail?.nearbySource === "foursquare" ? "Foursquare Places" : "Demo fallback"}
+                {detail?.nearbySource === "foursquare" ? "Live nearby places" : "Local area guide"}
               </Pill>
             </div>
-            {detail?.nearbyWarning ? <p className="nearby-warning">{detail.nearbyWarning}</p> : null}
+            {detail?.nearbyWarning ? <p className="nearby-warning">Live nearby information is temporarily unavailable, so saved local recommendations are shown.</p> : null}
             <div className="compact-list">
               {(detail?.nearbyPlaces || []).map((place) => (
                 <div className="simple-row" key={place.id}>
@@ -2262,20 +2686,129 @@ export default function App() {
             )}
             </div>
           ) : null}
-          {workspaceTab === "profile" ? (
-            <form className="panel form-panel" onSubmit={updateProfile} key={user?._id || "profile-form"}>
-            <div className="panel-head"><h3>Profile</h3><Pill tone="neutral">{user?.role}</Pill></div>
-            <ProviderRatingLine profile={user} />
-            <label>Business type<input name="businessType" defaultValue={user?.businessType || ""} /></label>
-            <label>Preferred area<input name="preferredArea" defaultValue={user?.preferredArea || ""} /></label>
-            <div className="field-row">
-              <label>Budget min<input name="budgetMin" type="number" min="0" defaultValue={user?.budgetMin || 0} /></label>
-              <label>Budget max<input name="budgetMax" type="number" min="0" defaultValue={user?.budgetMax || 0} /></label>
+          {isProfileView ? (
+            <div className="profile-workspace">
+              <section className="panel profile-hero" aria-labelledby="profile-name">
+                <div className="profile-photo-column">
+                  <div className={`profile-avatar ${role}`}>
+                    {user?.profilePhotoUrl
+                      ? <img src={user.profilePhotoUrl} alt={`${user?.name || "User"} profile`} />
+                      : <span aria-hidden="true">{accountInitials(user?.name)}</span>}
+                  </div>
+                  <label className="profile-photo-button" title="Upload profile photo">
+                    <Camera size={15} /><span>{user?.profilePhotoUrl ? "Change photo" : "Add photo"}</span>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" onChange={changeProfilePhoto} disabled={profilePhotoUploading} />
+                  </label>
+                  {profilePhotoUploading ? <span className="profile-photo-progress">Uploading...</span> : null}
+                </div>
+                <div className="profile-identity">
+                  <span className="eyebrow">{profileRole}</span>
+                  <h3 id="profile-name">{user?.name || "OfficeKhoj member"}</h3>
+                  <p>Your private account, role access and workspace preferences.</p>
+                  {profilePhotoError ? <p className="profile-photo-error" role="alert">{profilePhotoError}</p> : null}
+                  <div className="profile-badges">
+                    <Status value={profileVerification} />
+                    <Pill tone={user?.status === "suspended" ? "danger" : "success"}>{user?.status || "active"}</Pill>
+                    {isProviderProfile(user) ? <ProviderRatingLine profile={user} /> : null}
+                  </div>
+                </div>
+                <div className="profile-summary-panel">
+                  <div className="profile-completion-head"><span>Profile completion</span><strong>{profileCompletion}%</strong></div>
+                  <div className="profile-completion-track" aria-label={`Profile ${profileCompletion}% complete`}><i style={{ width: `${profileCompletion}%` }} /></div>
+                  <div className="profile-summary-facts">
+                    <span><ShieldCheck size={14} />Private contact details</span>
+                    <span><CalendarCheck size={14} />Member since {membershipDate}</span>
+                  </div>
+                </div>
+              </section>
+
+              {!isProfileSettings ? (
+                <section className="profile-stat-grid" aria-label="Account activity">
+                  {profileStats.map((metric) => <MetricCard key={metric.label} {...metric} />)}
+                </section>
+              ) : null}
+
+              <div className={`profile-content-grid ${isProfileSettings ? "settings-only" : "overview-only"}`}>
+                {isProfileSettings ? (
+                <form className="panel profile-form-card" onSubmit={updateProfile} key={user?._id || "profile-form"}>
+                  <div className="panel-head">
+                    <div><span className="eyebrow">Account details</span><h3>Personal information</h3></div>
+                    <Pill tone="neutral">Only you can see this</Pill>
+                  </div>
+                  <div className="field-row">
+                    <label>Display name<input name="name" defaultValue={user?.name || ""} minLength="2" maxLength="100" required /></label>
+                    <label>Phone number<input name="phone" type="tel" defaultValue={user?.phone || ""} minLength="7" maxLength="30" required /></label>
+                  </div>
+                  <label>
+                    Sign-in email
+                    <span className="private-input">
+                      <Mail size={17} />
+                      <input type="text" value={showPrivateEmail ? (user?.email || "") : maskedEmail(user?.email)} readOnly aria-describedby="private-email-note" />
+                      <button type="button" className="private-field-toggle" onClick={() => setShowPrivateEmail((current) => !current)} aria-label={showPrivateEmail ? "Hide sign-in email" : "Show sign-in email"}>
+                        {showPrivateEmail ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </span>
+                  </label>
+                  <p className="private-field-note" id="private-email-note"><ShieldCheck size={15} />This address is used for login and notifications. It is never shown on your public listing profile.</p>
+
+                  {role === "business" ? <ProfilePreferences user={user} /> : null}
+
+                  {role === "service" ? (
+                    <fieldset className="profile-fieldset">
+                      <legend>Service coverage</legend>
+                      <label>Coverage areas<input name="coverageAreas" defaultValue={(user?.coverageAreas || []).join(", ")} placeholder="Banani, Gulshan, Dhanmondi" required /></label>
+                      <p className="field-assist">Separate areas with commas. These locations help match your services to Business Owners.</p>
+                    </fieldset>
+                  ) : null}
+
+                  <div className="profile-form-actions">
+                    <span><ShieldCheck size={16} />Your role and verification status can only be changed by an Admin.</span>
+                    <button className="action primary" type="submit" disabled={busy}><Bookmark size={16} />{busy ? "Saving..." : "Save profile"}</button>
+                  </div>
+                </form>
+                ) : null}
+
+                {!isProfileSettings ? (
+                <aside className="profile-side-stack">
+                  <section className="panel profile-access-card">
+                    <div className="panel-head"><h3>Role access</h3><IconFrame icon={ShieldCheck} tone="green" /></div>
+                    <div className="profile-role-line"><strong>{profileRole}</strong><Status value={profileVerification} /></div>
+                    <p>{role === "business" ? "Browse, save, message, book and review verified listings." : role === "property" ? "Publish properties and manage business visit requests after verification." : role === "service" ? "Publish service packages and manage client bookings after verification." : "Verify accounts, moderate inventory, resolve reports and manage platform operations."}</p>
+                    {user?.tradeLicense ? <div className="profile-fact"><span>Trade license</span><strong>{user.tradeLicense}</strong></div> : null}
+                    {user?.nid ? <div className="profile-fact"><span>Identity record</span><strong>Provided and protected</strong></div> : null}
+                    {role === "service" ? <div className="profile-fact"><span>Coverage</span><strong>{asList(user?.coverageAreas)}</strong></div> : null}
+                  </section>
+
+                  <section className="panel profile-actions-card">
+                    <div className="panel-head"><h3>Quick actions</h3><Pill tone="neutral">{unreadCount} unread</Pill></div>
+                    <div className="profile-action-list">
+                      {role === "business" ? <button type="button" onClick={() => navigateToView("marketplace")}><Search size={17} /><span><strong>Find a workspace</strong><small>Browse verified matches</small></span><ChevronRight size={16} /></button> : null}
+                      {role === "property" ? <button type="button" onClick={() => navigateToView("listings")}><Building2 size={17} /><span><strong>Manage properties</strong><small>Update spaces and availability</small></span><ChevronRight size={16} /></button> : null}
+                      {role === "service" ? <button type="button" onClick={() => navigateToView("listings")}><Wrench size={17} /><span><strong>Manage service packages</strong><small>Update coverage and availability</small></span><ChevronRight size={16} /></button> : null}
+                      {role === "admin" ? <button type="button" onClick={() => { setAdminTab("queue"); navigateToView("admin"); }}><ShieldCheck size={17} /><span><strong>Open moderation queue</strong><small>Verify users and review reports</small></span><ChevronRight size={16} /></button> : null}
+                      {role !== "admin" ? <button type="button" onClick={() => navigateToView("pipeline")}><CalendarCheck size={17} /><span><strong>{role === "business" ? "My bookings" : "Booking requests"}</strong><small>Track every status update</small></span><ChevronRight size={16} /></button> : null}
+                      <button type="button" onClick={() => navigateToView("notifications")}><Bell size={17} /><span><strong>Notifications</strong><small>{unreadCount ? `${unreadCount} update${unreadCount === 1 ? "" : "s"} need${unreadCount === 1 ? "s" : ""} attention` : "You are all caught up"}</small></span><ChevronRight size={16} /></button>
+                    </div>
+                  </section>
+
+                  <section className="panel profile-activity-card">
+                    <div className="panel-head"><h3>Recent activity</h3><IconFrame icon={Activity} tone="blue" /></div>
+                    {recentProfileActivity.length ? (
+                      <div className="profile-activity-list">
+                        {recentProfileActivity.map((item) => (
+                          <button type="button" key={item._id} onClick={() => viewNotification(item)}>
+                            <span className={`profile-activity-dot ${item.read ? "read" : ""}`} />
+                            <span><strong>{item.title}</strong><small>{shortDate(item.createdAt)}</small></span>
+                            <ChevronRight size={15} />
+                          </button>
+                        ))}
+                      </div>
+                    ) : <Empty title="No recent account activity" />}
+                  </section>
+                </aside>
+                ) : null}
+              </div>
             </div>
-            <label>Preferred min size<input name="minSize" type="number" min="0" defaultValue={user?.minSize || 0} /></label>
-            <label>Service need<input name="serviceNeed" defaultValue={user?.serviceNeed || ""} /></label>
-            <button className="action primary" type="submit"><Bookmark size={16} />Save Profile</button>
-            </form>
           ) : null}
           {role === "business" && workspaceTab === "favorites" ? (
             <div className="panel listing-panel">
@@ -2291,7 +2824,7 @@ export default function App() {
   function renderOperations() {
     return (
       <>
-        <PageHeader eyebrow="Operations" title="Analytics and Database" meta={<Pill tone="success">{operations?.database?.status || "connected"}</Pill>} />
+        <PageHeader eyebrow="Operations" title="Platform Activity" meta={<Pill tone="success">Systems online</Pill>} />
         <section className="ops-grid">
           <div className="panel">
             <div className="panel-head"><h3>Category Mix</h3><Pill tone="neutral">Inventory</Pill></div>
@@ -2306,7 +2839,7 @@ export default function App() {
             </div>
           </div>
           <div className="panel database-panel">
-            <div className="panel-head"><h3>Database Collections</h3><Pill tone="neutral">{operations?.database?.collections || 0}</Pill></div>
+            <div className="panel-head"><h3>Platform Records</h3><Pill tone="neutral">{operations?.database?.collections || 0} groups</Pill></div>
             <div className="collection-grid">
               {(operations?.database?.counts || []).map((item) => (
                 <div className="collection-tile" key={item.name}>
@@ -2334,13 +2867,14 @@ export default function App() {
   }
 
   function renderSupport() {
+    const openTicketCount = visibleTickets.filter((ticket) => !["resolved", "closed"].includes(ticket.status)).length;
     return (
       <>
-        <PageHeader eyebrow="Support" title="Ticket Desk" meta={<Pill tone="warning">{operations?.operations?.openTickets || 0} open</Pill>}>
+        <PageHeader eyebrow="Support" title={role === "admin" ? "Support Operations" : "Ticket Desk"} meta={<Pill tone="warning">{openTicketCount} open</Pill>}>
           <a className="action secondary" href={`tel:${customerServicePhone}`}><PhoneCall size={16} />{customerServicePhone}</a>
         </PageHeader>
-        <section className="split-layout">
-          <form className="panel form-panel" onSubmit={createTicket}>
+        <section className={role === "admin" ? "single-focus-layout" : "split-layout"}>
+          {role !== "admin" ? <form className="panel form-panel" onSubmit={createTicket}>
             <div className="panel-head"><h3>New Ticket</h3><Pill tone="neutral">Support</Pill></div>
             <div className="support-callout">
               <IconFrame icon={PhoneCall} tone="green" />
@@ -2358,23 +2892,24 @@ export default function App() {
             </div>
             <label>Message<textarea name="message" defaultValue="Please help me compare Banani spaces with setup service availability." /></label>
             <button className="action primary" type="submit"><LifeBuoy size={16} />Create Ticket</button>
-          </form>
+          </form> : null}
           <div className="panel">
-            <div className="panel-head"><h3>Tickets</h3><Pill tone="neutral">{operations?.tickets?.length || 0}</Pill></div>
+            <div className="panel-head"><h3>{role === "admin" ? "Support Queue" : "My Tickets"}</h3><Pill tone="neutral">{visibleTickets.length}</Pill></div>
             <div className="ticket-list">
-              {(operations?.tickets || []).map((ticket) => (
+              {visibleTickets.map((ticket) => (
                 <article className="ticket-row" key={ticket._id}>
                   <IconFrame icon={LifeBuoy} tone={ticket.priority === "high" ? "rose" : "teal"} />
                   <div>
                     <div className="row-line"><h4>{ticket.subject}</h4><Status value={ticket.status} /></div>
                     <p>{ticket.requester?.name} - {ticket.category} - {ticket.priority}</p>
                   </div>
-                  <div className="row-actions">
+                  {role === "admin" ? <div className="row-actions">
                     <button className="action secondary small" type="button" onClick={() => updateTicket(ticket._id, "in-progress")}>Work</button>
                     <button className="action primary small" type="button" onClick={() => updateTicket(ticket._id, "resolved")}>Resolve</button>
-                  </div>
+                  </div> : null}
                 </article>
               ))}
+              {visibleTickets.length === 0 ? <Empty title={role === "admin" ? "No support tickets are waiting." : "You have not opened a support ticket yet."} /> : null}
             </div>
           </div>
         </section>
@@ -2392,6 +2927,7 @@ export default function App() {
           onChange={setAdminTab}
           items={[
             { key: "queue", label: "Moderation queue", icon: ShieldCheck, count: (admin.pendingUsers?.length || 0) + (admin.pendingListings?.length || 0) + (admin.reports?.length || 0) },
+            { key: "inventory", label: "Listing inventory", icon: Store, count: admin.inventory?.length || 0 },
             { key: "settings", label: "Platform settings", icon: Settings, count: operations?.settings?.length || 0 }
           ]}
         />
@@ -2404,9 +2940,13 @@ export default function App() {
               <div className="admin-row" key={pending._id}>
                 <IconFrame icon={UserRound} tone="amber" />
                 <div><strong>{pending.name}</strong><p>{pending.role} - {pending.tradeLicense || pending.nid || "No document"}</p></div>
-                <button className="action primary small" type="button" onClick={() => verifyUser(pending._id)}><CheckCircle2 size={15} />Verify</button>
+                <div className="row-actions">
+                  <button className="action primary small" type="button" onClick={() => updateUserVerification(pending._id, "verified")}><CheckCircle2 size={15} />Verify</button>
+                  <button className="action secondary small danger-action" type="button" onClick={() => updateUserVerification(pending._id, "rejected")}><XCircle size={15} />Reject</button>
+                </div>
               </div>
             ))}
+            {(admin.pendingUsers || []).length === 0 ? <Empty title="No pending users to verify." /> : null}
               </div>
               <div className="panel">
             <div className="panel-head"><h3>Pending Listings</h3><Pill tone="neutral">{admin.pendingListings?.length || 0}</Pill></div>
@@ -2417,18 +2957,63 @@ export default function App() {
                 <button className="action primary small" type="button" onClick={() => moderateListing(listing._id)}><ClipboardCheck size={15} />Approve</button>
               </div>
             ))}
+            {(admin.pendingListings || []).length === 0 ? <Empty title="No pending listings to review." /> : null}
               </div>
               <div className="panel">
             <div className="panel-head"><h3>Reports</h3><Pill tone="neutral">{admin.reports?.length || 0}</Pill></div>
             {(admin.reports || []).map((report) => (
               <div className="admin-row" key={report._id}>
                 <IconFrame icon={Activity} tone="rose" />
-                <div><strong>{report.targetType}</strong><p>{report.reason}</p></div>
-                <Status value={report.status} />
+                <div>
+                  <strong>{report.target?.title || report.target?.name || `Reported ${report.targetType}`}</strong>
+                  <p>{report.reason} · by {report.reporter?.name || "Legacy report"}</p>
+                </div>
+                <div className="row-actions">
+                  <Status value={report.status} />
+                  <button className="action secondary small" type="button" onClick={() => setReportReviewId(report._id)}>Review</button>
+                </div>
               </div>
             ))}
+            {(admin.reports || []).length === 0 ? <Empty title="No open reports." /> : null}
               </div>
             </>
+          ) : null}
+          {adminTab === "inventory" ? (
+            <div className="panel settings-panel">
+              <div className="panel-head">
+                <div>
+                  <h3>Platform Listing Inventory</h3>
+                  <p>All property and service listings, including unavailable and unverified records.</p>
+                </div>
+                <Pill tone="neutral">{admin.inventorySummary?.total || 0} total</Pill>
+              </div>
+              <div className="metric-grid compact-metrics">
+                <MetricCard icon={Building2} tone="blue" label="Properties" value={number(admin.inventorySummary?.property)} />
+                <MetricCard icon={Wrench} tone="teal" label="Services" value={number(admin.inventorySummary?.service)} />
+                <MetricCard icon={ShieldCheck} tone="amber" label="Pending" value={number(admin.inventorySummary?.pending)} />
+                <MetricCard icon={XCircle} tone="rose" label="Unavailable" value={number(admin.inventorySummary?.unavailable)} />
+              </div>
+              <div className="management-list">
+                {(admin.inventory || []).map((listing) => (
+                  <article className="management-row" key={listing._id}>
+                    <PhotoImage listing={listing} className="listing-thumb" />
+                    <div>
+                      <div className="row-line">
+                        <h4>{listing.title}</h4>
+                        <Status value={listing.verificationStatus} />
+                      </div>
+                      <p>{listing.listingType} · {listing.owner?.name || "Unknown owner"} · {listing.area}</p>
+                      <div className="micro-row"><span>{listing.category}</span><Status value={listing.status} /></div>
+                    </div>
+                    <div className="row-actions">
+                      <button className="action secondary small" type="button" onClick={() => openListing(listing._id)}>Open</button>
+                      <button className="action primary small danger-action" type="button" onClick={() => deleteListing(listing._id)}><XCircle size={15} />Remove</button>
+                    </div>
+                  </article>
+                ))}
+                {(admin.inventory || []).length === 0 ? <Empty title="No listings are currently stored." /> : null}
+              </div>
+            </div>
           ) : null}
           {adminTab === "settings" ? (
             <div className="panel settings-panel">
@@ -2437,7 +3022,7 @@ export default function App() {
               <form className="setting-row" key={setting._id} onSubmit={updateSetting}>
                 <input type="hidden" name="key" value={setting.key} />
                 <input type="hidden" name="valueType" value={setting.valueType} />
-                <div><strong>{setting.label}</strong><p>{setting.category} - {setting.key}</p></div>
+                <div><strong>{setting.label}</strong><p>{settingDescriptions[setting.key] || "Platform preference"}</p></div>
                 {setting.valueType === "boolean" ? (
                   <select name="value" defaultValue={String(setting.value)}>
                     <option value="true">Enabled</option>
@@ -2464,6 +3049,7 @@ export default function App() {
     messages: renderMessages,
     notifications: renderNotifications,
     workspace: renderWorkspace,
+    profile: renderWorkspace,
     operations: renderOperations,
     support: renderSupport,
     admin: renderAdmin
@@ -2493,39 +3079,76 @@ export default function App() {
           className="navigation-toggle"
           type="button"
           aria-label={mobileMenuOpen ? "Close navigation" : sidebarCollapsed ? "Expand navigation" : "Toggle navigation"}
+          title={mobileMenuOpen ? "Close menu" : sidebarCollapsed ? "Expand menu" : "Collapse menu"}
           aria-expanded={mobileMenuOpen || !sidebarCollapsed}
           onClick={() => {
             if (window.matchMedia("(max-width: 1020px)").matches) setMobileMenuOpen((current) => !current);
-            else setSidebarCollapsed((current) => !current);
+            else {
+              setSidebarCollapsed((current) => !current);
+            }
           }}
         >
           {mobileMenuOpen ? <XCircle size={19} /> : sidebarCollapsed ? <PanelLeft size={19} /> : <PanelLeftClose size={19} />}
+          <span className="navigation-toggle-label">{sidebarCollapsed ? "Show menu" : "Hide menu"}</span>
         </button>
         <div className="topbar-context">
           <span>OfficeKhoj BD</span>
           <strong>{currentNavItem?.label || "Dashboard"}</strong>
         </div>
         <div className="role-switcher auth-session-actions">
-          <button type="button" onClick={logout} title="Sign out of OfficeKhoj BD"><LogOut size={15} />Logout</button>
+          <button className="guide-trigger" type="button" onClick={() => { setGuideStep(0); setGuideOpen(true); }} title={`How to use the ${currentRole.label} workspace`}><Compass size={15} /><span>Guide</span></button>
         </div>
-        <div className="account-chip">
-          <span className={health?.ok ? "live-dot" : "live-dot muted"} />
-          <div>
-            <strong>{user?.name || "Connecting"}</strong>
-            <p>{user?.role || "session"}</p>
-            <ProviderRatingLine profile={user} />
-          </div>
+        <div className="account-menu-shell" ref={accountMenuRef}>
+          <button
+            className="account-chip"
+            type="button"
+            title="Open account menu"
+            aria-label="Open account menu"
+            aria-haspopup="menu"
+            aria-expanded={accountMenuOpen}
+            onClick={() => setAccountMenuOpen((current) => !current)}
+          >
+            <span className="account-avatar" aria-hidden="true">
+              {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} alt="" /> : accountInitials(user?.name)}
+              <i className={health?.ok ? "live-dot" : "live-dot muted"} />
+            </span>
+            <div>
+              <strong>{user?.name || "Connecting"}</strong>
+              <p>{accountRoleLabel(user?.role)}</p>
+            </div>
+            <ChevronDown className="account-menu-chevron" size={15} />
+          </button>
+          {accountMenuOpen ? (
+            <div className="account-menu-popover" role="menu" aria-label="Account options">
+              <div className="account-menu-profile">
+                <span className="account-menu-large-avatar" aria-hidden="true">
+                  {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} alt="" /> : accountInitials(user?.name)}
+                </span>
+                <div><strong>{user?.name}</strong><span>Private account</span><Pill tone="success">{accountRoleLabel(user?.role)}</Pill></div>
+              </div>
+              <div className="account-menu-items">
+                <button type="button" role="menuitem" onClick={() => { setProfileSection("overview"); navigateToView("profile"); }}><UserRound size={17} /><span><strong>My profile</strong><small>Photo, details and activity</small></span><ChevronRight size={15} /></button>
+                <button type="button" role="menuitem" onClick={() => { setProfileSection("settings"); navigateToView("profile"); }}><Settings size={17} /><span><strong>Account settings</strong><small>Preferences and private information</small></span><ChevronRight size={15} /></button>
+                <button type="button" role="menuitem" onClick={() => navigateToView("notifications")}><Bell size={17} /><span><strong>Notifications</strong><small>{notifications.filter((item) => !item.read).length} unread updates</small></span><ChevronRight size={15} /></button>
+                <button type="button" role="menuitem" onClick={() => navigateToView("support")}><LifeBuoy size={17} /><span><strong>Help & support</strong><small>Get account or platform help</small></span><ChevronRight size={15} /></button>
+              </div>
+              <button className="account-menu-logout" type="button" role="menuitem" onClick={logout}><LogOut size={17} /><span>Sign out</span></button>
+            </div>
+          ) : null}
         </div>
       </header>
 
       <main className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         {mobileMenuOpen ? <button className="mobile-nav-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileMenuOpen(false)} /> : null}
-        <aside className={`sidebar ${mobileMenuOpen ? "open" : ""}`} aria-label={`${currentRole.label} navigation`}>
+        <aside
+          className={`sidebar ${mobileMenuOpen ? "open" : ""}`}
+          aria-label={`${currentRole.label} navigation`}
+        >
           <div className="sidebar-heading">
             <span className="sidebar-label">{currentRole.label} menu</span>
             <button className="sidebar-close" type="button" aria-label="Close navigation" onClick={() => setMobileMenuOpen(false)}><XCircle size={18} /></button>
           </div>
-          {navItems.filter(({ key }) => canAccessView(role, key)).map(({ key, label, icon: Icon }) => {
+          {navItems.filter(({ key, showInSidebar }) => showInSidebar !== false && canAccessView(role, key)).map(({ key, label, icon: Icon }) => {
             const badge = key === "notifications"
               ? notifications.filter((item) => !item.read).length
               : key === "messages"
@@ -2535,7 +3158,14 @@ export default function App() {
                   )).length, 0)
                 : 0;
             return (
-              <button type="button" className={`nav-item ${view === key ? "active" : ""}`} key={key} onClick={() => navigateToView(key)} title={sidebarCollapsed ? label : undefined}>
+              <button
+                type="button"
+                className={`nav-item ${view === key ? "active" : ""}`}
+                key={key}
+                onClick={() => navigateToView(key)}
+                title={sidebarCollapsed ? label : undefined}
+                aria-label={badge > 0 ? `${label}, ${badge} unread` : label}
+              >
                 <Icon size={17} />
                 <span className="nav-label">{label}</span>
                 {badge > 0 && <strong className="nav-badge">{badge}</strong>}
@@ -2551,6 +3181,97 @@ export default function App() {
 
       {busy && <div className="busy-line" />}
       {toast && <div className="toast">{toast}</div>}
+      {guideOpen && (() => {
+        const steps = roleGuides[role] || roleGuides.business;
+        const step = steps[guideStep];
+        const StepIcon = step.icon;
+        return (
+          <div className="guide-backdrop" role="presentation" onClick={() => setGuideOpen(false)}>
+            <section className="product-guide" role="dialog" aria-modal="true" aria-labelledby="product-guide-title" onClick={(event) => event.stopPropagation()}>
+              <div className="guide-visual" aria-hidden="true">
+                <div className="guide-orbit guide-orbit-one" />
+                <div className="guide-orbit guide-orbit-two" />
+                <span><StepIcon size={34} /></span>
+              </div>
+              <div className="guide-copy">
+                <div className="guide-topline">
+                  <span className="eyebrow">{currentRole.label} guide</span>
+                  <button className="icon-button" type="button" aria-label="Close guide" onClick={() => setGuideOpen(false)}><XCircle size={18} /></button>
+                </div>
+                <p className="guide-progress-label">Step {guideStep + 1} of {steps.length}</p>
+                <h2 id="product-guide-title">{step.title}</h2>
+                <p>{step.text}</p>
+                <div className="guide-progress" aria-hidden="true">
+                  {steps.map((item, index) => <i className={index <= guideStep ? "active" : ""} key={item.title} />)}
+                </div>
+                <div className="guide-step-list" aria-label="Guide steps">
+                  {steps.map((item, index) => {
+                    const ItemIcon = item.icon;
+                    return <button className={index === guideStep ? "active" : ""} type="button" onClick={() => setGuideStep(index)} key={item.title}><ItemIcon size={16} /><span>{item.title}</span></button>;
+                  })}
+                </div>
+                <div className="guide-actions">
+                  <button className="action secondary" type="button" disabled={guideStep === 0} onClick={() => setGuideStep((current) => Math.max(0, current - 1))}>Back</button>
+                  <button className="action secondary" type="button" onClick={() => { navigateToView(step.view); setGuideOpen(false); }}>{step.action}</button>
+                  {guideStep < steps.length - 1 ? (
+                    <button className="action primary" type="button" onClick={() => setGuideStep((current) => Math.min(steps.length - 1, current + 1))}>Next<ChevronRight size={16} /></button>
+                  ) : (
+                    <button className="action primary" type="button" onClick={() => setGuideOpen(false)}><CheckCircle2 size={16} />Done</button>
+                  )}
+                </div>
+              </div>
+            </section>
+          </div>
+        );
+      })()}
+      {reportTarget && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setReportTarget(null)}>
+          <div className="confirm-modal booking-modal" role="dialog" aria-modal="true" aria-labelledby="report-target-title" onClick={(event) => event.stopPropagation()}>
+            <IconFrame icon={Flag} tone="rose" />
+            <div>
+              <span className="eyebrow">Platform trust</span>
+              <h3 id="report-target-title">Report {reportTarget.targetLabel}</h3>
+              <p>Tell the Admin team what appears fraudulent, misleading, unsafe, or low quality.</p>
+            </div>
+            <form className="booking-request-form" onSubmit={submitReport}>
+              <label>Reason<textarea name="reason" minLength="5" maxLength="500" rows="4" placeholder="Describe the issue clearly for the moderation team." required /></label>
+              <div className="modal-actions">
+                <button className="action secondary" type="button" onClick={() => setReportTarget(null)}>Cancel</button>
+                <button className="action primary danger-action" type="submit" disabled={busy}><Flag size={16} />Submit report</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {selectedAdminReport && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setReportReviewId("")}>
+          <div className="confirm-modal booking-modal" role="dialog" aria-modal="true" aria-labelledby="review-report-title" onClick={(event) => event.stopPropagation()}>
+            <IconFrame icon={ShieldCheck} tone="amber" />
+            <div>
+              <span className="eyebrow">Moderation report</span>
+              <h3 id="review-report-title">Review reported {selectedAdminReport.targetType}</h3>
+              <p>{selectedAdminReport.reason}</p>
+            </div>
+            <div className="booking-summary">
+              <span>Reporter: {selectedAdminReport.reporter?.name || "Legacy report"}</span>
+              <strong>{selectedAdminReport.target?.title || selectedAdminReport.target?.name || "Target no longer exists"}</strong>
+              {selectedAdminReport.target?.listingType ? <span>{selectedAdminReport.target.listingType} · {selectedAdminReport.target.area} · {selectedAdminReport.target.status}</span> : null}
+              {selectedAdminReport.target?.role ? <span>{selectedAdminReport.target.role} · {selectedAdminReport.target.verificationStatus} · {selectedAdminReport.target.status}</span> : null}
+            </div>
+            <div className="modal-actions">
+              <button className="action secondary" type="button" onClick={() => setReportReviewId("")}>Close</button>
+              <button className="action secondary" type="button" onClick={() => moderateReport(selectedAdminReport, "dismissed", "dismissed")}>Dismiss</button>
+              {selectedAdminReport.targetType === "listing" && selectedAdminReport.target?._id ? (
+                <>
+                  <button className="action secondary" type="button" onClick={() => { setReportReviewId(""); openListing(selectedAdminReport.target._id); }}>Open listing</button>
+                  <button className="action primary danger-action" type="button" onClick={() => removeReportedListing(selectedAdminReport)}><XCircle size={16} />Remove listing</button>
+                </>
+              ) : null}
+              <button className="action primary" type="button" onClick={() => moderateReport(selectedAdminReport, "resolved", "resolved")}><CheckCircle2 size={16} />Resolve</button>
+            </div>
+          </div>
+        </div>
+      )}
       {bookingTargetId && (
         <div className="modal-backdrop" role="presentation" onClick={() => setBookingTargetId("")}>
           <div className="confirm-modal booking-modal" role="dialog" aria-modal="true" aria-labelledby="booking-modal-title" onClick={(event) => event.stopPropagation()}>
@@ -2569,7 +3290,7 @@ export default function App() {
               <label>Notes (optional)<textarea name="notes" rows="3" placeholder="Share access, timing, or setup requirements." /></label>
               <div className="modal-actions">
                 <button className="action secondary" type="button" onClick={() => setBookingTargetId("")}>Cancel</button>
-                <button className="action primary" type="submit"><CalendarCheck size={16} />{bookingTargetListing?.listingType === "service" ? "Request service" : "Request visit"}</button>
+                <button className="action primary" type="submit" disabled={busy}><CalendarCheck size={16} />{bookingTargetListing?.listingType === "service" ? "Request service" : "Request visit"}</button>
               </div>
             </form>
           </div>
@@ -2588,7 +3309,7 @@ export default function App() {
               <label>Alternate date and time<input name="alternateAt" type="datetime-local" min={dateTimeLocalValue(Date.now() + 300000)} defaultValue={dateTimeLocalValue()} required /></label>
               <div className="modal-actions">
                 <button className="action secondary" type="button" onClick={() => setAlternateBookingId("")}>Cancel</button>
-                <button className="action primary" type="submit"><CalendarCheck size={16} />Send alternate time</button>
+                <button className="action primary" type="submit" disabled={busy}><CalendarCheck size={16} />Send alternate time</button>
               </div>
             </form>
           </div>
@@ -2605,7 +3326,7 @@ export default function App() {
             </div>
             <div className="modal-actions">
               <button className="action secondary" type="button" onClick={() => setDeleteTargetId("")}>Cancel</button>
-              <button className="action primary danger-action" type="button" onClick={confirmDeleteListing}><XCircle size={16} />Delete</button>
+              <button className="action primary danger-action" type="button" onClick={confirmDeleteListing} disabled={busy}><XCircle size={16} />Delete</button>
             </div>
           </div>
         </div>

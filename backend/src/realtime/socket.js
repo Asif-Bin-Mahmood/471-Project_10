@@ -88,8 +88,24 @@ export function emitNewMessage(io, conversationId, message) {
         role: message.sender?.role || "user"
       },
       body: message.body,
+      kind: message.kind || "text",
+      attachmentUrl: message.attachmentUrl || "",
+      attachmentName: message.attachmentName || "",
+      attachmentMimeType: message.attachmentMimeType || "",
+      attachmentSize: message.attachmentSize || 0,
+      durationSeconds: message.durationSeconds || 0,
+      readBy: (message.readBy || []).map((reader) => String(reader?._id || reader)),
       createdAt: message.createdAt
     }
+  });
+}
+
+export function emitMessagesRead(io, conversationId, messageIds, readerId) {
+  if (!io || !messageIds?.length || !readerId) return;
+  io.to(conversationRoom(conversationId)).emit("message:read", {
+    conversationId: String(conversationId),
+    messageIds: messageIds.map(String),
+    readerId: String(readerId)
   });
 }
 

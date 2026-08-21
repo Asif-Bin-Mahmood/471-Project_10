@@ -19,6 +19,6 @@ const reviewSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-reviewSchema.index({ listing: 1, reviewer: 1 });
+reviewSchema.index({ listing: 1, reviewer: 1 }, { unique: true });
 
 export default mongoose.model("Review", reviewSchema);

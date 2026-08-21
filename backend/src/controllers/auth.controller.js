@@ -33,8 +33,14 @@ export async function register(req, res, next) {
     }
     if (name.length < 2) return res.status(422).json({ error: "Name must be at least 2 characters." });
     if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(422).json({ error: "A valid email is required." });
-    if (phone.length < 7) return res.status(422).json({ error: "A valid phone number is required." });
+    if (!/^\+?[0-9]{7,15}$/.test(phone)) return res.status(422).json({ error: "A valid phone number is required." });
     if (password.length < 6) return res.status(422).json({ error: "Password must be at least 6 characters." });
+    if (nid && !/^[A-Za-z0-9-]{5,50}$/.test(nid)) {
+      return res.status(422).json({ error: "NID must contain 5 to 50 letters, numbers, or hyphens." });
+    }
+    if (tradeLicense && !/^[A-Za-z0-9._\/-]{4,80}$/.test(tradeLicense)) {
+      return res.status(422).json({ error: "Trade license format is invalid." });
+    }
     if (role === "property-owner" && (!nid || !tradeLicense)) {
       return res.status(422).json({ error: "Property owners must provide NID and trade license details." });
     }

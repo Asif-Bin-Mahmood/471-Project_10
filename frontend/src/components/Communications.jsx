@@ -1,15 +1,22 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Bell,
   CalendarCheck,
+  Check,
   CheckCheck,
   CircleDollarSign,
+  ImagePlus,
+  LoaderCircle,
   MessageSquareText,
+  Mic,
   Search,
   Send,
-  Settings
+  Settings,
+  Square,
+  X
 } from "lucide-react";
+import { uploadMessageAttachment } from "../services/messageAttachment.js";
 
 const conversationFilters = ["all", "unread", "owners", "bookings"];
 const notificationFilters = ["all", "booking", "message", "payment", "system"];
@@ -54,6 +61,14 @@ function otherParticipant(conversation, userId) {
 
 function latestMessage(conversation) {
   return conversation.messages?.at(-1) || null;
+}
+
+function messagePreview(message) {
+  if (!message) return "No messages yet";
+  if (message.body) return message.body;
+  if (message.kind === "image") return "📷 Image";
+  if (message.kind === "audio") return "🎙 Voice message";
+  return "Message";
 }
 
 function unreadMessages(conversation, userId) {
@@ -101,8 +116,19 @@ export function MessagesPage({
   busy
 }) {
   const messageFeedRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const recordingStreamRef = useRef(null);
+  const recordingChunksRef = useRef([]);
+  const recordingStartedAtRef = useRef(0);
+  const [draft, setDraft] = useState("");
+  const [pendingAttachment, setPendingAttachment] = useState(null);
+  const [composerBusy, setComposerBusy] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [composerError, setComposerError] = useState("");
   const selectedConversation = conversations.find((item) => item._id === selectedConversationId);
   const selectedParticipant = selectedConversation ? otherParticipant(selectedConversation, user?._id) : null;
+  const selectedParticipantId = selectedParticipant?._id;
 
   const filteredConversations = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -129,6 +155,111 @@ export function MessagesPage({
     if (!messageFeedRef.current) return;
     messageFeedRef.current.scrollTop = messageFeedRef.current.scrollHeight;
   }, [messages]);
+
+  useEffect(() => () => {
+    if (pendingAttachment?.previewUrl) URL.revokeObjectURL(pendingAttachment.previewUrl);
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, [pendingAttachment?.previewUrl]);
+
+  function clearAttachment() {
+    if (pendingAttachment?.previewUrl) URL.revokeObjectURL(pendingAttachment.previewUrl);
+    setPendingAttachment(null);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  }
+
+  function chooseImage(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!new Set(["image/jpeg", "image/png", "image/webp"]).has(file.type)) {
+      setComposerError("Choose a JPEG, PNG or WebP image.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setComposerError("Images must be 8 MB or smaller.");
+      event.target.value = "";
+      return;
+    }
+    clearAttachment();
+    setPendingAttachment({ file, kind: "image", previewUrl: URL.createObjectURL(file), durationSeconds: 0 });
+    setComposerError("");
+  }
+
+  async function toggleRecording() {
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setComposerError("Voice recording is not supported by this browser.");
+      return;
+    }
+    try {
+      clearAttachment();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const supportedType = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"]
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(stream, supportedType ? { mimeType: supportedType } : undefined);
+      recordingStreamRef.current = stream;
+      recordingChunksRef.current = [];
+      recordingStartedAtRef.current = Date.now();
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const durationSeconds = Math.max(1, Math.round((Date.now() - recordingStartedAtRef.current) / 1000));
+        const contentType = String(recorder.mimeType || "audio/webm").split(";")[0];
+        const extension = contentType === "audio/mp4" ? "m4a" : contentType === "audio/ogg" ? "ogg" : "webm";
+        const file = new File(recordingChunksRef.current, `voice-${Date.now()}.${extension}`, { type: contentType });
+        recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        if (file.size) setPendingAttachment({ file, kind: "audio", previewUrl: URL.createObjectURL(file), durationSeconds });
+      };
+      recorder.onerror = () => {
+        setComposerError("The voice recording could not be completed.");
+        setRecording(false);
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+      setComposerError("");
+    } catch {
+      setComposerError("Microphone access was not granted. Allow it in your browser and try again.");
+    }
+  }
+
+  async function submitMessage(event) {
+    event.preventDefault();
+    const message = draft.trim();
+    if ((!message && !pendingAttachment) || composerBusy || busy || recording) return;
+    setComposerBusy(true);
+    setComposerError("");
+    try {
+      let attachment = null;
+      if (pendingAttachment) {
+        attachment = await uploadMessageAttachment(pendingAttachment.file, pendingAttachment.kind, selectedConversationId);
+      }
+      const sent = await onSend({
+        conversationId: selectedConversationId,
+        message,
+        kind: attachment?.kind || "text",
+        attachmentUrl: attachment?.url || "",
+        attachmentName: attachment?.name || "",
+        attachmentMimeType: attachment?.contentType || "",
+        attachmentSize: attachment?.size || 0,
+        durationSeconds: pendingAttachment?.durationSeconds || 0
+      });
+      if (sent) {
+        setDraft("");
+        clearAttachment();
+      }
+    } catch (error) {
+      setComposerError(error.message || "The message could not be sent.");
+    } finally {
+      setComposerBusy(false);
+    }
+  }
 
   const connectionLabel = socketStatus === "connected"
     ? "Live"
@@ -172,7 +303,7 @@ export function MessagesPage({
                   <span className="conversation-summary">
                     <span className="conversation-line"><strong>{participant?.name || conversation.subject}</strong><time>{relativeTime(latest?.createdAt || conversation.updatedAt)}</time></span>
                     <span className="conversation-context">{roleLabel(participant?.role)}{conversation.listing?.title ? ` · ${conversation.listing.title}` : ""}</span>
-                    <span className={`conversation-preview ${unread ? "unread" : ""}`}>{latest?.body || "No messages yet"}</span>
+                    <span className={`conversation-preview ${unread ? "unread" : ""}`}>{messagePreview(latest)}</span>
                   </span>
                   {unread > 0 && <span className="conversation-unread">{unread}</span>}
                 </button>
@@ -192,7 +323,7 @@ export function MessagesPage({
               <p>Chat with property owners or service providers about listings, terms, and bookings.</p>
             </div>
           ) : (
-            <form className="active-conversation" onSubmit={onSend}>
+            <form className="active-conversation" onSubmit={submitMessage}>
               <header className="active-conversation-header">
                 <button className="mobile-conversation-back" type="button" aria-label="Back to conversations" onClick={onBack}><ArrowLeft size={18} /></button>
                 <Avatar name={selectedParticipant?.name || selectedConversation.subject} size="small" />
@@ -200,20 +331,68 @@ export function MessagesPage({
                 <span className={`realtime-status ${socketStatus}`}>{connectionLabel}</span>
               </header>
               <div className="modern-message-feed" ref={messageFeedRef}>
-                {messages.map((message) => {
+                {messages.map((message, index) => {
                   const mine = String(message.sender?._id || message.sender) === String(user?._id);
+                  const readByRecipient = mine && (message.readBy || []).some(
+                    (reader) => String(reader?._id || reader) === String(selectedParticipantId)
+                  );
+                  const isLatestOwnMessage = mine && !messages.slice(index + 1).some(
+                    (nextMessage) => String(nextMessage.sender?._id || nextMessage.sender) === String(user?._id)
+                  );
                   return (
                     <div className={`modern-message ${mine ? "mine" : "theirs"}`} key={message._id}>
-                      <div><p>{message.body}</p><time>{relativeTime(message.createdAt)}</time></div>
+                      <div className={`message-bubble ${message.kind || "text"}`}>
+                        {message.kind === "image" && message.attachmentUrl && (
+                          <a className="message-image-link" href={message.attachmentUrl} target="_blank" rel="noreferrer" aria-label="Open full-size image">
+                            <img src={message.attachmentUrl} alt={message.attachmentName || "Shared image"} />
+                          </a>
+                        )}
+                        {message.kind === "audio" && message.attachmentUrl && (
+                          <div className="message-audio"><Mic size={16} aria-hidden="true" /><audio controls preload="metadata" src={message.attachmentUrl}>Your browser cannot play this voice message.</audio></div>
+                        )}
+                        {message.body && <p>{message.body}</p>}
+                        <span className="message-meta">
+                          <time title={new Date(message.createdAt).toLocaleString()}>{relativeTime(message.createdAt)}</time>
+                          {isLatestOwnMessage && (
+                            <span className={`message-delivery ${readByRecipient ? "seen" : "sent"}`}>
+                              {readByRecipient ? <CheckCheck size={13} /> : <Check size={13} />}
+                              {readByRecipient ? "Seen" : "Sent"}
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
                 {!messages.length && <div className="communications-list-empty"><MessageSquareText size={22} /><strong>No messages yet</strong><p>Start the conversation below.</p></div>}
               </div>
               <input type="hidden" name="conversationId" value={selectedConversationId} />
-              <div className="modern-compose-row">
-                <textarea name="message" placeholder="Write a message..." aria-label="Message" required />
-                <button type="submit" disabled={busy}><Send size={17} />Send</button>
+              <div className="message-composer-shell">
+                {pendingAttachment && (
+                  <div className="message-attachment-preview">
+                    {pendingAttachment.kind === "image"
+                      ? <img src={pendingAttachment.previewUrl} alt="Selected attachment preview" />
+                      : <span className="voice-preview"><Mic size={17} /><span><strong>Voice message</strong><small>{pendingAttachment.durationSeconds}s ready to send</small></span><audio controls src={pendingAttachment.previewUrl} /></span>}
+                    <button type="button" onClick={clearAttachment} aria-label="Remove attachment"><X size={16} /></button>
+                  </div>
+                )}
+                {composerError && <p className="message-composer-error" role="alert">{composerError}</p>}
+                <div className="modern-compose-row">
+                  <input ref={imageInputRef} className="message-file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseImage} />
+                  <button className="compose-icon-button" type="button" onClick={() => imageInputRef.current?.click()} aria-label="Attach an image" title="Attach image" disabled={busy || composerBusy || recording}><ImagePlus size={19} /></button>
+                  <button className={`compose-icon-button voice ${recording ? "recording" : ""}`} type="button" onClick={toggleRecording} aria-label={recording ? "Stop voice recording" : "Record a voice message"} title={recording ? "Stop recording" : "Record voice"} disabled={busy || composerBusy}>
+                    {recording ? <Square size={16} fill="currentColor" /> : <Mic size={19} />}
+                  </button>
+                  <textarea name="message" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }} placeholder={recording ? "Recording voice message…" : "Write a message"} aria-label="Message" maxLength="4000" disabled={recording} />
+                  <button className="compose-send-button" type="submit" disabled={busy || composerBusy || recording || (!draft.trim() && !pendingAttachment)}>
+                    {composerBusy ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}<span>Send</span>
+                  </button>
+                </div>
               </div>
             </form>
           )}
@@ -258,7 +437,20 @@ export function NotificationsPage({ notifications, unreadCount, filter, onFilter
           {visibleNotifications.map((item) => {
             const Icon = notificationIcon(item.type);
             return (
-              <article className={`modern-notification ${item.read ? "read" : "unread"}`} key={item._id}>
+              <article
+                className={`modern-notification ${item.read ? "read" : "unread"}`}
+                key={item._id}
+                role="link"
+                tabIndex="0"
+                aria-label={`Open ${item.title}`}
+                onClick={() => onView(item)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onView(item);
+                  }
+                }}
+              >
                 <span className={`notification-icon ${item.type}`}><Icon size={20} /></span>
                 <div className="notification-copy">
                   <div className="notification-title-line">
@@ -270,8 +462,8 @@ export function NotificationsPage({ notifications, unreadCount, filter, onFilter
                   <time>{relativeTime(item.createdAt)}</time>
                 </div>
                 <div className="notification-actions">
-                  <button type="button" onClick={() => onView(item)}>View</button>
-                  {!item.read && <button type="button" className="secondary" onClick={() => onRead(item._id)}>Mark as read</button>}
+                  <span className="notification-open-hint">Open</span>
+                  {!item.read && <button type="button" className="secondary" onClick={(event) => { event.stopPropagation(); onRead(item._id); }}>Mark as read</button>}
                 </div>
               </article>
             );

@@ -1,4 +1,4 @@
-import { uploadListingPhoto } from "../services/firebaseStorage.service.js";
+import { uploadListingPhoto } from "../services/listingPhotoStorage.service.js";
 
 const ROLE_BY_LISTING_TYPE = {
   property: "property-owner",
