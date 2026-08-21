@@ -21,24 +21,36 @@ function money(value) {
 
 function OptionalRange({ name, label, value, min, max, step, formatter, onChange }) {
   const selected = Number(value) > 0;
+  const sliderMax = Math.max(max, Math.ceil(Number(value || 0) / step) * step);
   return (
     <div className="preference-range">
       <div className="preference-range-head">
-        <label htmlFor={`preference-${name}`}>{label}</label>
+        <label htmlFor={`preference-${name}-amount`}>{label}</label>
         <strong className={selected ? "" : "unset"}>{selected ? formatter(value) : "Not set"}</strong>
       </div>
-      <input type="hidden" name={name} value={selected ? value : ""} readOnly />
       <input
-        id={`preference-${name}`}
+        className="preference-number-input"
+        id={`preference-${name}-amount`}
+        name={name}
+        type="number"
+        min={min}
+        step={step}
+        value={selected ? value : ""}
+        onChange={(event) => onChange(event.target.value === "" ? 0 : Math.max(min, Number(event.target.value) || 0))}
+        placeholder="Enter any amount"
+      />
+      <input
+        id={`preference-${name}-slider`}
         type="range"
         min={min}
-        max={max}
+        max={sliderMax}
         step={step}
         value={selected ? value : min}
         onChange={(event) => onChange(Number(event.target.value))}
         aria-valuetext={selected ? formatter(value) : "Not set"}
+        aria-label={`${label} slider`}
       />
-      <div className="preference-range-scale"><span>{formatter(min)}</span><span>{formatter(max)}</span></div>
+      <div className="preference-range-scale"><span>{formatter(min)}</span><span>{formatter(sliderMax)}+</span></div>
     </div>
   );
 }
@@ -61,7 +73,7 @@ export default function ProfilePreferences({ user }) {
 
   function updateMaximum(nextValue) {
     setBudgetMax(nextValue);
-    if (budgetMin > nextValue) setBudgetMin(nextValue);
+    if (nextValue > 0 && budgetMin > nextValue) setBudgetMin(nextValue);
   }
 
   return (
@@ -69,7 +81,7 @@ export default function ProfilePreferences({ user }) {
       <legend>Workspace preferences</legend>
       <div className="preference-intro">
         <span><SlidersHorizontal size={17} /></span>
-        <div><strong>Set only what matters to you</strong><p>Move a slider or select a service. Unchanged preferences remain empty.</p></div>
+        <div><strong>Set only what matters to you</strong><p>Move a slider or type any larger amount. Unchanged preferences remain empty.</p></div>
         <button type="button" onClick={clearRanges}><RotateCcw size={14} />Clear sliders</button>
       </div>
       <div className="field-row">

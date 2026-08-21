@@ -15,8 +15,6 @@ import {
   ClipboardCheck,
   Compass,
   Gauge,
-  Eye,
-  EyeOff,
   Flag,
   Heart,
   LayoutDashboard,
@@ -392,10 +390,9 @@ function asList(value) {
 }
 
 function maskedEmail(value) {
-  const [local = "", domain = ""] = String(value || "").split("@");
-  if (!local || !domain) return "Private email";
-  const visible = local.slice(0, Math.min(2, local.length));
-  return `${visible}${"•".repeat(Math.max(4, Math.min(8, local.length - visible.length)))}@${domain}`;
+  const [, domain = ""] = String(value || "").split("@");
+  if (!domain) return "Protected account email";
+  return `••••••••@${domain}`;
 }
 
 const accountRoleLabels = {
@@ -912,7 +909,6 @@ export default function App() {
   const [profileSection, setProfileSection] = useState("overview");
   const [profilePhotoUploading, setProfilePhotoUploading] = useState(false);
   const [profilePhotoError, setProfilePhotoError] = useState("");
-  const [showPrivateEmail, setShowPrivateEmail] = useState(false);
   const [adminTab, setAdminTab] = useState("queue");
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideStep, setGuideStep] = useState(0);
@@ -2741,15 +2737,13 @@ export default function App() {
                   </div>
                   <label>
                     Sign-in email
-                    <span className="private-input">
+                    <span className="private-input protected">
                       <Mail size={17} />
-                      <input type="text" value={showPrivateEmail ? (user?.email || "") : maskedEmail(user?.email)} readOnly aria-describedby="private-email-note" />
-                      <button type="button" className="private-field-toggle" onClick={() => setShowPrivateEmail((current) => !current)} aria-label={showPrivateEmail ? "Hide sign-in email" : "Show sign-in email"}>
-                        {showPrivateEmail ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </button>
+                      <input type="text" value={maskedEmail(user?.email)} readOnly aria-describedby="private-email-note" aria-label="Protected sign-in email" />
+                      <span className="private-field-status" aria-hidden="true"><ShieldCheck size={15} />Protected</span>
                     </span>
                   </label>
-                  <p className="private-field-note" id="private-email-note"><ShieldCheck size={15} />This address is used for login and notifications. It is never shown on your public listing profile.</p>
+                  <p className="private-field-note" id="private-email-note"><ShieldCheck size={15} />Your complete sign-in address is stored securely for login and notifications and is not displayed on this page or any public profile.</p>
 
                   {role === "business" ? <ProfilePreferences user={user} /> : null}
 
