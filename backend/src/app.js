@@ -24,7 +24,7 @@ const allowedOrigins = new Set([
   ...configuredOrigins,
   ...(process.env.NODE_ENV === "production" ? [] : ["http://127.0.0.1:5173", "http://localhost:5173"])
 ]);
-const corsOptions = {
+export const corsOptions = {
   credentials: true,
   origin(origin, callback) {
     if (!origin || allowedOrigins.has(origin)) return callback(null, true);

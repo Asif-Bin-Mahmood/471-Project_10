@@ -8,13 +8,6 @@ import {
   Wrench
 } from "lucide-react";
 
-const DEMO_ACCOUNTS = [
-  { role: "Business Owner", email: "asifnzs118+officekhoj.business@gmail.com", password: "demo123", icon: BriefcaseBusiness },
-  { role: "Property Owner", email: "asifnzs118+officekhoj.property@gmail.com", password: "demo123", icon: Building2 },
-  { role: "Service Provider", email: "asifnzs118+officekhoj.service@gmail.com", password: "demo123", icon: Wrench },
-  { role: "Admin", email: "asifnzs118+officekhoj.admin@gmail.com", password: "admin123", icon: ShieldCheck }
-];
-
 const REGISTRATION_ROLES = [
   { value: "business-owner", label: "Business Owner" },
   { value: "property-owner", label: "Property Owner" },
@@ -92,17 +85,6 @@ export default function AuthPage({ busy, error, onClearError, onLogin, onRegiste
               <button className="action primary auth-submit" type="submit" disabled={busy}><LogIn size={17} />{busy ? "Signing in..." : "Sign in"}</button>
             </form>
 
-            <div className="demo-login-section">
-              <div className="auth-divider"><span>Showcase demo accounts</span></div>
-              <div className="demo-login-grid">
-                {DEMO_ACCOUNTS.map(({ role, email, password, icon: Icon }) => (
-                  <button type="button" key={email} disabled={busy} onClick={() => onLogin({ email, password })} aria-label={`Open ${role} demo workspace`}>
-                    <Icon size={16} />
-                    <span><strong>{role}</strong><small>One-click showcase access</small></span>
-                  </button>
-                ))}
-              </div>
-            </div>
           </>
         ) : (
           <>
