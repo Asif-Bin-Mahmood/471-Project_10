@@ -666,7 +666,9 @@ function ListingRow({ listing, onOpen, onSave, onBook, onMessage, canEngage = fa
           <>
             <button type="button" className="icon-button" title="Save / remove favorite" onClick={() => onSave(listing._id)}><Heart size={16} /></button>
             <button type="button" className="icon-button" title="Message" onClick={() => onMessage(listing._id)}><Mail size={16} /></button>
-            <button type="button" className="action primary small" onClick={() => onBook(listing._id)}><CalendarCheck size={15} />Book</button>
+            <button type="button" className="action primary small" onClick={() => onBook(listing._id)}>
+              <CalendarCheck size={15} />{listing.listingType === "service" ? "Book service" : "Request visit"}
+            </button>
           </>
         ) : null}
         <button type="button" className="action secondary small" onClick={() => onOpen(listing._id)}>Open<ChevronRight size={15} /></button>
@@ -2540,7 +2542,14 @@ export default function App() {
                   {role !== "admin" && String(listing.owner?._id || "") !== String(user?._id || "") ? (
                     <div className="row-actions">
                       {role === "business" ? (
-                        <button type="button" className="action primary small" onClick={() => startConversation(listing._id)}><MessageSquareText size={15} />Message</button>
+                        <>
+                          {listing.status === "Available" ? (
+                            <button type="button" className="action primary small" onClick={() => requestBooking(listing._id)}>
+                              <CalendarCheck size={15} />{listing.listingType === "service" ? "Book service" : "Request visit"}
+                            </button>
+                          ) : null}
+                          <button type="button" className="action secondary small" onClick={() => startConversation(listing._id)}><MessageSquareText size={15} />Message</button>
+                        </>
                       ) : null}
                       <button type="button" className="action secondary small" onClick={() => openReportForm("listing", listing._id, listing.title)}><Flag size={15} />Report {listing.listingType}</button>
                       {listing.owner?._id ? (

@@ -1,5 +1,25 @@
 import { v2 as cloudinary } from "cloudinary";
-import { validateListingPhoto } from "./firebaseStorage.service.js";
+
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+function validationError(message) {
+  const error = new Error(message);
+  error.status = 422;
+  return error;
+}
+
+function validateListingPhoto({ buffer, contentType }) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw validationError("Photo file data is required.");
+  }
+  if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+    throw validationError("Only JPEG, PNG and WebP images are supported.");
+  }
+  if (buffer.length > MAX_FILE_BYTES) {
+    throw validationError("Each photo must be 8 MB or smaller.");
+  }
+}
 
 function configuredError(message) {
   const error = new Error(message);

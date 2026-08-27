@@ -3494,7 +3494,7 @@ textarea:focus {
   }
 }
 
-/* Member 2: Firebase Storage photo and portfolio uploads */
+/* Member 2: Cloudinary photo and portfolio uploads */
 .photo-upload-field {
   display: grid;
   gap: 8px;
