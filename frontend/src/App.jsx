@@ -432,15 +432,6 @@ function ProviderRatingLine({ profile }) {
   );
 }
 
-function humanizePhotoName(value) {
-  return String(value || "photo")
-    .split("/")
-    .pop()
-    .replace(/\.[^.]+$/, "")
-    .replace(/[-_]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function photoUrl(photo, listing) {
   if (photo && /^https?:\/\//i.test(photo)) return photo;
   if (photo && String(photo).startsWith("/")) return photo;
@@ -2527,8 +2518,7 @@ export default function App() {
                 <div className="gallery-grid">
                   {(listing.photos?.length ? listing.photos : [primaryPhoto(listing)]).map((photo, index) => (
                     <figure className="gallery-tile" key={`${photo}-${index}`}>
-                      <PhotoImage listing={listing} photo={photo} className="gallery-photo" alt={`${listing.title} ${humanizePhotoName(photo)}`} />
-                      <figcaption>{humanizePhotoName(photo)}</figcaption>
+                      <PhotoImage listing={listing} photo={photo} className="gallery-photo" alt={`${listing.title} - photo ${index + 1}`} />
                     </figure>
                   ))}
                 </div>

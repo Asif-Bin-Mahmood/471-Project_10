@@ -1,16 +1,6 @@
 import { useEffect, useState } from "react";
 import { uploadListingPhotos } from "../services/photoUpload.js";
 
-function displayName(url) {
-  if (!url) return "Photo";
-  try {
-    const parsed = new URL(url);
-    return decodeURIComponent(parsed.pathname.split("/").pop() || "Photo");
-  } catch {
-    return String(url).split("/").pop() || "Photo";
-  }
-}
-
 export default function PhotoUploadField({
   listingType,
   initialUrls = [],
@@ -75,11 +65,11 @@ export default function PhotoUploadField({
 
       {urls.length ? (
         <div className="photo-upload-list">
-          {urls.map((url) => (
+          {urls.map((url, index) => (
             <div className="photo-upload-item" key={url}>
-              {/^https?:\/\//i.test(url) ? <img src={url} alt={displayName(url)} /> : <span className="photo-upload-placeholder">IMG</span>}
-              <span title={url}>{displayName(url)}</span>
-              <button type="button" onClick={() => removeUrl(url)}>Remove</button>
+              {/^https?:\/\//i.test(url) ? <img src={url} alt={`Photo ${index + 1}`} /> : <span className="photo-upload-placeholder">IMG</span>}
+              <span>{`Photo ${index + 1}`}</span>
+              <button type="button" onClick={() => removeUrl(url)} aria-label={`Remove photo ${index + 1}`}>Remove</button>
             </div>
           ))}
         </div>
