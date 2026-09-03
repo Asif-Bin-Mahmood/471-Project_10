@@ -5,8 +5,7 @@ import Listing from "../models/Listing.js";
 import Notification from "../models/Notification.js";
 import { emitBookingUpdate, emitMessagesRead, emitNewMessage, joinConversationParticipants } from "../realtime/socket.js";
 import { uploadCloudinaryMessageAttachment } from "../services/cloudinaryStorage.service.js";
-import { sendEmail } from "../services/email.service.js";
-import { bookingAcceptedEmail, bookingRequestEmail, newMessageEmail } from "../templates/email.templates.js";
+import { notifyUser } from "../services/notification.service.js";
 import { canAccessUser } from "../utils/auth.js";
 
 function isConversationParticipant(conversation, userId) {
@@ -158,17 +157,6 @@ export async function createMessage(req, res, next) {
       readBy: [req.user._id]
     });
     await conversation.save();
-    await Notification.insertMany(
-      conversation.participants
-        .filter((id) => String(id) !== String(req.user._id))
-        .map((user) => ({
-          user,
-          type: "message",
-          title: "New message",
-          message: body || (kind === "image" ? "Sent an image." : "Sent a voice message."),
-          channel: "email"
-        }))
-    );
     await ActivityLog.create({
       actor: req.user._id,
       action: "message.sent",
@@ -180,21 +168,14 @@ export async function createMessage(req, res, next) {
     });
     await conversation.populate("listing participants messages.sender");
     const message = conversation.messages.at(-1);
+    const preview = body || (kind === "image" ? "Sent an image." : "Sent a voice message.");
     for (const recipient of conversation.participants.filter((participant) => String(participant._id) !== String(req.user._id))) {
-      try {
-        await sendEmail({
-          to: recipient.email,
-          ...newMessageEmail({
-            recipientName: recipient.name,
-            senderName: req.user.name,
-            conversationSubject: conversation.subject,
-            body: body || (kind === "image" ? "Sent an image." : "Sent a voice message.")
-          }),
-          event: "inquiry.message"
-        });
-      } catch (emailError) {
-        console.error(`[email] inquiry.message failed: ${emailError.message}`);
-      }
+      await notifyUser(req.app.get("io"), {
+        user: recipient._id,
+        type: "message",
+        title: `New message from ${req.user.name}`,
+        message: `${conversation.subject}: ${preview}`
+      });
     }
     emitNewMessage(req.app.get("io"), conversation._id, message);
     res.status(201).json({ conversation, message });
@@ -259,12 +240,11 @@ export async function createBooking(req, res, next) {
       notes: String(req.body.notes || "").trim(),
       history: [{ status: "requested", by: requester._id }]
     });
-    await Notification.create({
+    await notifyUser(req.app.get("io"), {
       user: listing.owner,
       type: "booking",
       title: "New booking request",
-      message: `${requester.name} requested ${listing.title}.`,
-      channel: "email"
+      message: `${requester.name} requested ${listing.title}.`
     });
     await ActivityLog.create({
       actor: requester._id,
@@ -277,22 +257,6 @@ export async function createBooking(req, res, next) {
     });
     await booking.populate("listing requester receiver");
     emitBookingUpdate(req.app.get("io"), booking, "created");
-    try {
-      await sendEmail({
-        to: booking.receiver?.email,
-        ...bookingRequestEmail({
-          recipientName: booking.receiver?.name,
-          requesterName: requester.name,
-          listingTitle: booking.listing?.title || listing.title,
-          requestType: booking.requestType,
-          proposedAt: booking.proposedAt,
-          notes: booking.notes
-        }),
-        event: "booking.requested"
-      });
-    } catch (emailError) {
-      console.error(`[email] booking.requested failed: ${emailError.message}`);
-    }
     res.status(201).json({ booking });
   } catch (error) {
     next(error);
@@ -336,12 +300,11 @@ export async function respondToBooking(req, res, next) {
     booking.status = nextStatus;
     booking.history.push({ status: booking.status, by: req.user._id });
     await booking.save();
-    await Notification.create({
+    await notifyUser(req.app.get("io"), {
       user: booking.requester,
       type: "booking",
       title: `Booking ${booking.status}`,
-      message: `Your request is ${booking.status}.`,
-      channel: "email"
+      message: `Your request is ${booking.status}.`
     });
     await ActivityLog.create({
       actor: req.user._id,
@@ -354,22 +317,6 @@ export async function respondToBooking(req, res, next) {
     });
     await booking.populate("listing requester receiver");
     emitBookingUpdate(req.app.get("io"), booking, "status-changed");
-    if (booking.status === "accepted") {
-      try {
-        await sendEmail({
-          to: booking.requester?.email,
-          ...bookingAcceptedEmail({
-            recipientName: booking.requester?.name,
-            listingTitle: booking.listing?.title || "your OfficeKhoj listing",
-            proposedAt: booking.proposedAt,
-            alternateAt: booking.alternateAt
-          }),
-          event: "booking.accepted"
-        });
-      } catch (emailError) {
-        console.error(`[email] booking.accepted failed: ${emailError.message}`);
-      }
-    }
     res.json({ booking });
   } catch (error) {
     next(error);

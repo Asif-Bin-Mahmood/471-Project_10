@@ -6,7 +6,6 @@ const notificationSchema = new mongoose.Schema(
     type: { type: String, required: true, index: true },
     title: { type: String, required: true },
     message: { type: String, required: true },
-    channel: { type: String, enum: ["in-app", "email"], default: "in-app" },
     read: { type: Boolean, default: false }
   },
   { timestamps: true }

@@ -357,7 +357,7 @@ let emailLogs = [
     event: "booking-confirmation",
     subject: "OfficeKhoj BD booking confirmation",
     status: "queued",
-    provider: "Nodemailer/SendGrid ready",
+    provider: "In-app notifications",
     createdAt: "2026-07-18T12:00:00.000Z"
   }
 ];
@@ -464,7 +464,7 @@ function addEmailLog(to, event, subject) {
     event,
     subject,
     status: "queued",
-    provider: "Nodemailer/SendGrid ready",
+    provider: "In-app notifications",
     createdAt: nowIso()
   };
   emailLogs.unshift(log);

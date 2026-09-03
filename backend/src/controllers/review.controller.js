@@ -1,10 +1,8 @@
 import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
 import Listing from "../models/Listing.js";
-import Notification from "../models/Notification.js";
 import Review from "../models/Review.js";
-import { sendEmail } from "../services/email.service.js";
-import { newReviewEmail } from "../templates/email.templates.js";
+import { notifyUser } from "../services/notification.service.js";
 
 const REVIEWER_SAFE_FIELDS = "name role";
 const COMMENT_MAX_LENGTH = 1000;
@@ -172,29 +170,12 @@ export async function createReview(req, res, next) {
     });
     await review.populate("reviewer", REVIEWER_SAFE_FIELDS);
     const updatedListing = await updateListingRating(listing._id);
-    await Notification.create({
+    await notifyUser(req.app.get("io"), {
       user: listing.owner,
       type: "review",
       title: "New review received",
-      message: `${req.user.name} reviewed ${listing.title}.`,
-      channel: "email"
+      message: `${req.user.name} reviewed ${listing.title}.`
     });
-    try {
-      await listing.populate("owner");
-      await sendEmail({
-        to: listing.owner?.email,
-        ...newReviewEmail({
-          recipientName: listing.owner?.name,
-          reviewerName: req.user.name,
-          listingTitle: listing.title,
-          rating: validRating,
-          comment: commentResult.comment
-        }),
-        event: "review.submitted"
-      });
-    } catch (emailError) {
-      console.error(`[email] review.submitted failed: ${emailError.message}`);
-    }
     res.status(201).json({ review, listing: updatedListing });
   } catch (error) {
     next(error);

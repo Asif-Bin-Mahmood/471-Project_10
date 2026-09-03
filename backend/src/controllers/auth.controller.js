@@ -1,5 +1,5 @@
-import Notification from "../models/Notification.js";
 import User from "../models/User.js";
+import { notifyUser } from "../services/notification.service.js";
 import { signToken } from "../utils/auth.js";
 
 const PUBLIC_REGISTRATION_ROLES = new Set([
@@ -65,7 +65,7 @@ export async function register(req, res, next) {
 
     const admin = await User.findOne({ role: "admin" });
     if (admin && user.verificationStatus === "pending") {
-      await Notification.create({
+      await notifyUser(req.app.get("io"), {
         user: admin._id,
         type: "verification",
         title: "New verification request",

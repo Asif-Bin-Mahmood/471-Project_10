@@ -1473,12 +1473,22 @@ export default function App() {
       }
     };
 
+    const handleNotification = (incoming) => {
+      if (!incoming?._id) return;
+      setNotifications((current) => (
+        current.some((item) => String(item._id) === String(incoming._id))
+          ? current
+          : [incoming, ...current]
+      ));
+    };
+
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
     socket.on("message:new", handleMessage);
     socket.on("message:read", handleMessagesRead);
     socket.on("booking:updated", handleBookingUpdate);
+    socket.on("notification:new", handleNotification);
     socket.io.on("reconnect_attempt", handleReconnectAttempt);
     if (socket.connected) handleConnect();
 
@@ -1489,6 +1499,7 @@ export default function App() {
       socket.off("message:new", handleMessage);
       socket.off("message:read", handleMessagesRead);
       socket.off("booking:updated", handleBookingUpdate);
+      socket.off("notification:new", handleNotification);
       socket.io.off("reconnect_attempt", handleReconnectAttempt);
       disconnectSocket();
     };

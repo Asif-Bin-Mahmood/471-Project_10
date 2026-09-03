@@ -105,7 +105,7 @@ export async function getDashboard(req, res, next) {
         "Map-based commercial space and service search",
         "Property and service listing management",
         "In-app messaging",
-        "Notification and email workflow",
+        "In-app notification system",
         "Reviews and ratings",
         "Favorites and listing detail gallery",
         "Nearby places and availability",

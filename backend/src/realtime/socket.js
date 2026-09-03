@@ -100,6 +100,22 @@ export function emitNewMessage(io, conversationId, message) {
   });
 }
 
+export function emitNotification(io, notification) {
+  if (!io || !notification) return;
+  const payload = notification.toObject ? notification.toObject() : notification;
+  const recipientId = payload.user?._id || payload.user;
+  if (!recipientId) return;
+
+  io.to(userRoom(recipientId)).emit("notification:new", {
+    _id: String(payload._id),
+    type: payload.type,
+    title: payload.title,
+    message: payload.message,
+    read: Boolean(payload.read),
+    createdAt: payload.createdAt
+  });
+}
+
 export function emitMessagesRead(io, conversationId, messageIds, readerId) {
   if (!io || !messageIds?.length || !readerId) return;
   io.to(conversationRoom(conversationId)).emit("message:read", {
