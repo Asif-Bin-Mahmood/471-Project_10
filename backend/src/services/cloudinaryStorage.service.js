@@ -182,3 +182,72 @@ export async function uploadCloudinaryListingPhoto({
     provider: "cloudinary"
   };
 }
+
+// -----------------------------------------------------------------------------
+// Asset cleanup
+//
+// Removing a photo from a listing previously left the uploaded file publicly
+// retrievable at its Cloudinary URL forever, so an image could never actually
+// be withdrawn once uploaded. These helpers delete the stored object as well.
+// -----------------------------------------------------------------------------
+
+// Turns a Cloudinary delivery URL back into its public id, or "" when the URL
+// is not an asset this application uploaded.
+export function cloudinaryPublicIdFromUrl(url, { ownerId } = {}) {
+  const value = String(url || "").trim();
+  if (!value.startsWith("https://res.cloudinary.com/")) return "";
+
+  const cloudName = String(process.env.CLOUDINARY_CLOUD_NAME || "").trim().toLowerCase();
+  if (!cloudName) return "";
+
+  let path;
+  try {
+    const parsed = new URL(value);
+    if (parsed.pathname.split("/")[1]?.toLowerCase() !== cloudName) return "";
+    path = parsed.pathname;
+  } catch {
+    return "";
+  }
+
+  const marker = "/upload/";
+  const index = path.indexOf(marker);
+  if (index === -1) return "";
+
+  let publicId = path.slice(index + marker.length).replace(/^v[0-9]+\//, "");
+  publicId = publicId.replace(/\.[^./]+$/, "");
+  if (!publicId.startsWith("officekhoj/")) return "";
+
+  // Only ever delete an asset that lives in this owner's own folder, so a user
+  // cannot remove somebody else's media by referencing its URL.
+  if (ownerId && !publicId.includes(`/${safeFolderPart(ownerId)}/`)) return "";
+
+  return publicId;
+}
+
+export async function deleteCloudinaryAssets(urls, { ownerId, resourceType = "image" } = {}) {
+  const publicIds = [...new Set(
+    (Array.isArray(urls) ? urls : [urls])
+      .map((url) => cloudinaryPublicIdFromUrl(url, { ownerId }))
+      .filter(Boolean)
+  )];
+  if (!publicIds.length) return { deleted: [], failed: [] };
+
+  try {
+    configureCloudinary();
+  } catch {
+    return { deleted: [], failed: publicIds };
+  }
+
+  const deleted = [];
+  const failed = [];
+  for (const publicId of publicIds) {
+    try {
+      await cloudinary.uploader.destroy(publicId, { resource_type: resourceType, invalidate: true });
+      deleted.push(publicId);
+    } catch (error) {
+      failed.push(publicId);
+      console.error(`[cloudinary] failed to delete ${publicId}: ${error.message}`);
+    }
+  }
+  return { deleted, failed };
+}

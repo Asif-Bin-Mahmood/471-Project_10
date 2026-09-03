@@ -4,6 +4,7 @@ import Review from "../models/Review.js";
 import User from "../models/User.js";
 import { addressSuggestions } from "../seed/seedSource.js";
 import { getFoursquareNearbyPlaces } from "../services/foursquare.service.js";
+import { deleteCloudinaryAssets } from "../services/cloudinaryStorage.service.js";
 import { geocodeArea, lookupAddressById, searchAddressSuggestions } from "../services/nominatim.service.js";
 import { canManageDocument } from "../utils/auth.js";
 import { haversineKm, locationMetric, nearbyPlaces, serializeListing } from "../utils/geo.js";
@@ -752,6 +753,16 @@ export async function updateListing(req, res, next) {
       runValidators: true
     }).populate("owner");
 
+    // Photos dropped from the listing are also removed from storage, so a
+    // withdrawn image stops being publicly retrievable.
+    if (update.photos !== undefined) {
+      const keep = new Set(listing.photos || []);
+      const removed = (existing.photos || []).filter((photo) => !keep.has(photo));
+      if (removed.length) {
+        deleteCloudinaryAssets(removed, { ownerId: existing.owner }).catch(() => undefined);
+      }
+    }
+
     res.json({ listing: serializeListing(listing) });
   } catch (error) {
     next(error);
@@ -771,7 +782,11 @@ export async function deleteListing(req, res, next) {
       });
     }
 
+    const storedPhotos = [...(listing.photos || [])];
     await listing.deleteOne();
+    if (storedPhotos.length) {
+      deleteCloudinaryAssets(storedPhotos, { ownerId: listing.owner }).catch(() => undefined);
+    }
     res.json({ listing });
   } catch (error) {
     next(error);
