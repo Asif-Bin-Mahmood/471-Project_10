@@ -1,5 +1,51 @@
 import nodemailer from "nodemailer";
 
+// Render blocks outbound SMTP on both 465 and 587, so Gmail cannot be reached
+// from the deployed host at all. When BREVO_API_KEY is present the same
+// messages are delivered over HTTPS instead, which no host blocks. Without
+// that key nothing changes and SMTP is used exactly as before.
+const BREVO_SEND_URL = "https://api.brevo.com/v3/smtp/email";
+const BREVO_ACCOUNT_URL = "https://api.brevo.com/v3/account";
+const HTTP_TIMEOUT_MS = 12000;
+
+function brevoApiKey() {
+  return String(process.env.BREVO_API_KEY || "").trim();
+}
+
+async function brevoRequest(url, { method = "GET", body } = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method,
+      signal: controller.signal,
+      headers: {
+        accept: "application/json",
+        "api-key": brevoApiKey(),
+        ...(body ? { "content-type": "application/json" } : {})
+      },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload?.message || `Brevo request failed with status ${response.status}.`);
+      error.code = response.status === 401 ? "EAUTH" : "EBREVO";
+      error.responseCode = response.status;
+      throw error;
+    }
+    return payload;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const timeoutError = new Error("Brevo request timed out.");
+      timeoutError.code = "ETIMEDOUT";
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // Some hosts (Render's free instances among them) block outbound SMTPS on 465
 // while still permitting submission on 587, so try both before giving up.
 const SMTP_CANDIDATES = [
@@ -80,8 +126,12 @@ function maskedEmail(address) {
 }
 
 export async function verifyEmailTransport() {
+  if (brevoApiKey()) {
+    const account = await brevoRequest(BREVO_ACCOUNT_URL);
+    return { provider: "brevo", account: account?.email ? maskedEmail(account.email) : undefined };
+  }
   await resolveTransport();
-  return { port: transportPort };
+  return { provider: "smtp", port: transportPort };
 }
 
 export async function sendEmail({ to, subject, text, html, event = "notification" }) {
@@ -90,6 +140,30 @@ export async function sendEmail({ to, subject, text, html, event = "notification
     const error = new Error("Email recipient is required.");
     error.code = "EMAIL_RECIPIENT_REQUIRED";
     throw error;
+  }
+
+  const senderAddress = String(process.env.EMAIL_USER || "").trim();
+
+  if (brevoApiKey()) {
+    if (!senderAddress) {
+      const error = new Error("EMAIL_USER is required as the verified Brevo sender address.");
+      error.code = "EMAIL_NOT_CONFIGURED";
+      throw error;
+    }
+    const result = await brevoRequest(BREVO_SEND_URL, {
+      method: "POST",
+      body: {
+        sender: { name: "OfficeKhoj BD", email: senderAddress },
+        replyTo: { email: senderAddress },
+        to: [{ email: recipient }],
+        subject,
+        textContent: text,
+        htmlContent: html,
+        headers: { "X-OfficeKhoj-Event": event }
+      }
+    });
+    console.log(`[email] ${event} sent to ${maskedEmail(recipient)} via brevo (${result?.messageId || "queued"})`);
+    return result;
   }
 
   const { user } = emailConfiguration();

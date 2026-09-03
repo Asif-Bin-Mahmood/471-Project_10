@@ -20,8 +20,9 @@ function describeSmtpError(error) {
   if (code === "EMAIL_NOT_CONFIGURED") reason = "EMAIL_USER and EMAIL_PASS are not set.";
   else if (responseCode === 535 || code === "EAUTH") reason = "Gmail rejected the credentials. Check the App Password.";
   else if (code === "EDNS") reason = "Could not resolve smtp.gmail.com from this host.";
+  else if (code === "EBREVO") reason = "Brevo rejected the request. Check that EMAIL_USER is a verified sender.";
   else if (code === "ETIMEDOUT" || code === "ESOCKET" || code === "ECONNECTION") {
-    reason = "Neither smtp.gmail.com:465 nor :587 could be reached. This host blocks outbound SMTP.";
+    reason = "Neither smtp.gmail.com:465 nor :587 could be reached. This host blocks outbound SMTP; set BREVO_API_KEY to send over HTTPS instead.";
   }
   return { ok: false, code: code || "UNKNOWN", responseCode, reason };
 }
@@ -32,8 +33,10 @@ async function checkSmtp() {
   }
   let result;
   try {
-    const { port } = await verifyEmailTransport();
-    result = { ok: true, port, reason: `Gmail accepted the credentials on port ${port}.` };
+    const details = await verifyEmailTransport();
+    result = details.provider === "brevo"
+      ? { ok: true, provider: "brevo", reason: "Brevo accepted the API key. Mail is sent over HTTPS." }
+      : { ok: true, provider: "smtp", port: details.port, reason: `Gmail accepted the credentials on port ${details.port}.` };
   } catch (error) {
     result = describeSmtpError(error);
   }
@@ -50,7 +53,8 @@ export async function getHealth(req, res) {
     timestamp: new Date().toISOString(),
     integrations: {
       database: mongoose.connection.readyState === 1,
-      email: configured("EMAIL_USER", "EMAIL_PASS"),
+      email: configured("EMAIL_USER") && (configured("EMAIL_PASS") || configured("BREVO_API_KEY")),
+      emailProvider: configured("BREVO_API_KEY") ? "brevo" : "smtp",
       cloudinary: configured("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"),
       foursquare: configured("FOURSQUARE_BEARER_TOKEN"),
       nominatim: true
