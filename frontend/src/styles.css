@@ -1123,6 +1123,20 @@ textarea:focus {
 }
 
 .listing-thumb,
+.gallery-manage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 18px;
+}
+
+.gallery-manage .editor-help {
+  margin: 0;
+  flex: 1 1 240px;
+}
+
 .gallery-tile {
   position: relative;
   overflow: hidden;

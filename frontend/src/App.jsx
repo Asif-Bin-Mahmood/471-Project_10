@@ -1585,6 +1585,14 @@ export default function App() {
     }, "Listing details updated");
   }
 
+  // Owners reach the photo/detail editor straight from the listing they are
+  // viewing, instead of having to rediscover it under Listings.
+  function manageListingMedia(id) {
+    setEditingListingId(id);
+    setListingWorkspaceTab("manage");
+    navigateToView("listings");
+  }
+
   function editListingAddress(listing) {
     setAddressEditor({ listingId: listing._id, selectedAddress: null, resetKey: Date.now() });
   }
@@ -2427,6 +2435,10 @@ export default function App() {
 
   function renderWorkspace() {
     const listing = selectedListing;
+    const ownsListing = Boolean(
+      listing && user && String(listing.owner?._id || listing.owner || "") === String(user._id)
+    );
+    const canManageListingMedia = ownsListing && (role === "property" || role === "service");
     const reviews = detail?.listing?.reviews || [];
     const reviewSummary = detail?.reviewSummary || {};
     const reviewEligibility = detail?.reviewEligibility;
@@ -2520,6 +2532,14 @@ export default function App() {
                     </figure>
                   ))}
                 </div>
+                {canManageListingMedia ? (
+                  <div className="gallery-manage">
+                    <p className="editor-help">You own this listing. Photos can be removed or replaced in the listing editor.</p>
+                    <button className="action secondary small" type="button" onClick={() => manageListingMedia(listing._id)}>
+                      <Settings size={15} />Manage photos &amp; details
+                    </button>
+                  </div>
+                ) : null}
                 <p className="detail-copy">{listing.description}</p>
                 <div className="metric-grid compact-metrics">
                   <MetricCard icon={CircleDollarSign} tone="green" label="Price" value={money(listing.price)} />
