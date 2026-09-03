@@ -4,7 +4,10 @@ let transporter;
 
 function emailConfiguration() {
   const user = String(process.env.EMAIL_USER || "").trim();
-  const pass = String(process.env.EMAIL_PASS || "").trim();
+  // Google displays app passwords in four spaced groups ("abcd efgh ijkl mnop").
+  // Gmail's SMTP AUTH rejects the spaced form, so strip all whitespace rather
+  // than only trimming the ends.
+  const pass = String(process.env.EMAIL_PASS || "").replace(/\s+/g, "");
   if (!user || !pass) {
     const error = new Error("Email delivery is not configured. EMAIL_USER and EMAIL_PASS are required.");
     error.code = "EMAIL_NOT_CONFIGURED";
