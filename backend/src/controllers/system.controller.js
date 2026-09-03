@@ -19,7 +19,10 @@ function describeSmtpError(error) {
   let reason = "SMTP verification failed.";
   if (code === "EMAIL_NOT_CONFIGURED") reason = "EMAIL_USER and EMAIL_PASS are not set.";
   else if (responseCode === 535 || code === "EAUTH") reason = "Gmail rejected the credentials. Check the App Password.";
-  else if (code === "EDNS" || code === "ECONNECTION" || code === "ETIMEDOUT") reason = "Could not reach the Gmail SMTP server.";
+  else if (code === "EDNS") reason = "Could not resolve smtp.gmail.com from this host.";
+  else if (code === "ETIMEDOUT" || code === "ESOCKET" || code === "ECONNECTION") {
+    reason = "Neither smtp.gmail.com:465 nor :587 could be reached. This host blocks outbound SMTP.";
+  }
   return { ok: false, code: code || "UNKNOWN", responseCode, reason };
 }
 
@@ -29,8 +32,8 @@ async function checkSmtp() {
   }
   let result;
   try {
-    await verifyEmailTransport();
-    result = { ok: true, reason: "Gmail accepted the credentials." };
+    const { port } = await verifyEmailTransport();
+    result = { ok: true, port, reason: `Gmail accepted the credentials on port ${port}.` };
   } catch (error) {
     result = describeSmtpError(error);
   }
