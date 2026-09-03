@@ -4,8 +4,7 @@ import Review from "../models/Review.js";
 import User from "../models/User.js";
 import { addressSuggestions } from "../seed/seedSource.js";
 import { getFoursquareNearbyPlaces } from "../services/foursquare.service.js";
-import { resolveMapboxAddress, searchMapboxAddresses } from "../services/mapboxGeocoding.service.js";
-import { geocodeArea } from "../services/nominatim.service.js";
+import { geocodeArea, lookupAddressById, searchAddressSuggestions } from "../services/nominatim.service.js";
 import { canManageDocument } from "../utils/auth.js";
 import { haversineKm, locationMetric, nearbyPlaces, serializeListing } from "../utils/geo.js";
 import { attachProviderRating } from "../utils/providerRating.js";
@@ -304,7 +303,7 @@ function sortListingResults(listings, sort) {
 
 async function resolveListingAddress(addressId) {
   const localSuggestion = addressSuggestions.find((item) => item.id === addressId);
-  return localSuggestion || resolveMapboxAddress(addressId);
+  return localSuggestion || lookupAddressById(addressId);
 }
 
 function validateCreateRequest(body, listingType) {
@@ -455,7 +454,7 @@ export async function getAddressSuggestions(req, res, next) {
       return res.status(422).json({ error: "Enter at least 3 characters to search addresses." });
     }
 
-    const suggestions = await searchMapboxAddresses(query);
+    const suggestions = await searchAddressSuggestions(query);
     res.set("Cache-Control", "no-store");
     res.json({ suggestions });
   } catch (error) {
