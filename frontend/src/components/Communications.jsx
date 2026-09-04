@@ -19,9 +19,11 @@ import {
 import { uploadMessageAttachment } from "../services/messageAttachment.js";
 
 const conversationFilters = ["all", "unread", "owners", "bookings"];
-// The backend only ever raises these four notification types, so the filters
-// mirror them exactly. "payment" and "system" chips previously matched nothing.
-const notificationFilters = ["all", "booking", "message", "review", "verification"];
+// The backend raises exactly these four notification types. Chips are built
+// from the types the signed-in user actually has, in this order, so a filter
+// is never offered for a category that would come back empty. A business owner
+// therefore sees Bookings and Messages, while a listing owner also sees Reviews.
+const notificationTypeOrder = ["booking", "message", "review", "verification"];
 const notificationFilterLabels = {
   all: "All",
   booking: "Bookings",
@@ -420,6 +422,8 @@ function notificationIcon(type) {
 
 export function NotificationsPage({ notifications, unreadCount, filter, onFilter, onRead, onReadAll, onView, busy }) {
   const visibleNotifications = filter === "all" ? notifications : notifications.filter((item) => item.type === filter);
+  const presentTypes = new Set(notifications.map((item) => item.type));
+  const notificationFilters = ["all", ...notificationTypeOrder.filter((type) => presentTypes.has(type))];
 
   return (
     <div className="communications-page notifications-page">
