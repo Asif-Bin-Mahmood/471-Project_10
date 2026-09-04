@@ -8445,66 +8445,22 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   Sidebar collapse control
-   The toggle used to sit in the top bar, detached from the rail it operates
-   and separated from it by the brand divider. On desktop it now sits at the
-   top of the sidebar itself, directly above the items it hides. The top bar
-   keeps its own trigger below 1021px, where the sidebar is an overlay and a
-   control inside it would be unreachable while it is closed.
+   Collapsed sidebar: top bar alignment
+   When the sidebar collapses to an icon rail the brand block kept the expanded
+   sidebar's 236px column and its right-hand divider, so the divider sat far to
+   the right of the 72px rail beneath it and the menu toggle appeared to float
+   in the gap. Collapsed, the brand sizes to its own content and drops the
+   divider, so the toggle reads as part of the bar rather than as a stray
+   control between two mismatched edges.
 --------------------------------------------------------------------------- */
-.sidebar-toggle {
-  display: none;
-}
-
 @media (min-width: 1021px) {
-  .app-topbar .navigation-toggle {
-    display: none;
-  }
-
-  .app-topbar {
-    grid-template-columns: 236px minmax(180px, 1fr) auto auto;
-    gap: 16px;
-  }
-
   .app-topbar:has(+ .app-shell.sidebar-collapsed) {
-    grid-template-columns: auto minmax(180px, 1fr) auto auto;
+    grid-template-columns: auto auto minmax(180px, 1fr) auto auto;
+    gap: 14px;
   }
 
   .app-topbar:has(+ .app-shell.sidebar-collapsed) .brand {
     border-right: 0;
     padding-right: 0;
-  }
-
-  .sidebar-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 11px;
-    width: 100%;
-    min-height: 38px;
-    margin-bottom: 6px;
-    padding: 0 11px;
-    border: 1px solid var(--ok-border);
-    border-radius: 10px;
-    background: #fff;
-    color: var(--ok-text-soft);
-    font-size: 12.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: color 160ms ease, border-color 160ms ease;
-  }
-
-  .sidebar-toggle:hover {
-    color: var(--ok-text);
-  }
-
-  .sidebar-collapsed .sidebar-toggle {
-    justify-content: center;
-    padding: 0;
-  }
-
-  .app-shell.sidebar-collapsed .sidebar:hover .sidebar-toggle,
-  .app-shell.sidebar-collapsed.sidebar-hover-open .sidebar-toggle {
-    justify-content: flex-start;
-    padding: 0 11px;
   }
 }
