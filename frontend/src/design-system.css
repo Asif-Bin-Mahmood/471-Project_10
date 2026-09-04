@@ -8443,3 +8443,24 @@ body {
     opacity: 1;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Collapsed sidebar: top bar alignment
+   When the sidebar collapses to an icon rail the brand block kept the expanded
+   sidebar's 236px column and its right-hand divider, so the divider sat far to
+   the right of the 72px rail beneath it and the menu toggle appeared to float
+   in the gap. Collapsed, the brand sizes to its own content and drops the
+   divider, so the toggle reads as part of the bar rather than as a stray
+   control between two mismatched edges.
+--------------------------------------------------------------------------- */
+@media (min-width: 1021px) {
+  .app-topbar:has(+ .app-shell.sidebar-collapsed) {
+    grid-template-columns: auto auto minmax(180px, 1fr) auto auto;
+    gap: 14px;
+  }
+
+  .app-topbar:has(+ .app-shell.sidebar-collapsed) .brand {
+    border-right: 0;
+    padding-right: 0;
+  }
+}
