@@ -3168,6 +3168,17 @@ export default function App() {
           className={`sidebar ${mobileMenuOpen ? "open" : ""}`}
           aria-label={`${currentRole.label} navigation`}
         >
+          <button
+            className="sidebar-toggle"
+            type="button"
+            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+            title={sidebarCollapsed ? "Show menu" : "Hide menu"}
+            aria-expanded={!sidebarCollapsed}
+            onClick={() => setSidebarCollapsed((current) => !current)}
+          >
+            {sidebarCollapsed ? <PanelLeft size={17} /> : <PanelLeftClose size={17} />}
+            <span className="nav-label">{sidebarCollapsed ? "Show menu" : "Hide menu"}</span>
+          </button>
           <div className="sidebar-heading">
             <span className="sidebar-label">{currentRole.label} menu</span>
             <button className="sidebar-close" type="button" aria-label="Close navigation" onClick={() => setMobileMenuOpen(false)}><XCircle size={18} /></button>
