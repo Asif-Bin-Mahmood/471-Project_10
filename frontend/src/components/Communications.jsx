@@ -19,7 +19,16 @@ import {
 import { uploadMessageAttachment } from "../services/messageAttachment.js";
 
 const conversationFilters = ["all", "unread", "owners", "bookings"];
-const notificationFilters = ["all", "booking", "message", "payment", "system"];
+// The backend only ever raises these four notification types, so the filters
+// mirror them exactly. "payment" and "system" chips previously matched nothing.
+const notificationFilters = ["all", "booking", "message", "review", "verification"];
+const notificationFilterLabels = {
+  all: "All",
+  booking: "Bookings",
+  message: "Messages",
+  review: "Reviews",
+  verification: "Verifications"
+};
 
 function relativeTime(value) {
   if (!value) return "";
@@ -428,7 +437,7 @@ export function NotificationsPage({ notifications, unreadCount, filter, onFilter
           <div className="communications-filters" aria-label="Notification filters">
             {notificationFilters.map((item) => (
               <button type="button" className={filter === item ? "active" : ""} key={item} onClick={() => onFilter(item)}>
-                {item === "booking" ? "Bookings" : item === "message" ? "Messages" : item === "payment" ? "Payments" : item[0].toUpperCase() + item.slice(1)}
+                {notificationFilterLabels[item] || item[0].toUpperCase() + item.slice(1)}
               </button>
             ))}
           </div>
